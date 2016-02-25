@@ -575,9 +575,9 @@ slim/register [
 		
 			word? column [
 				column: get-bulk-property blk column
-				v?? column
-				v?? default
-				v?? col
+				;v?? column
+				;v?? default
+				;v?? col
 				either all [
 					none? column
 					default
@@ -620,9 +620,9 @@ slim/register [
 	][
 		vin [{filter-bulk()}]
 		columns: bulk-columns blK
-		v?? mode
-		v?? spec
-		v?? blk
+		;v?? mode
+		;v?? spec
+		;v?? blk
 		
 		
 		switch/default mode [
@@ -730,8 +730,8 @@ slim/register [
 
 				until [
 					skip?: not either series? data: pick blk column [
-						v?? data
-						v?? spec
+						;v?? data
+						;v?? spec
 						if bulk-find-same :spec data [
 							vprint "found data"
 							remove/part blk columns
