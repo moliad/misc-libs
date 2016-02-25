@@ -1,7 +1,7 @@
 rebol [
 	; -- Core Header attributes --
 	title: "Chrono - High-precision time measurement"
-	file: %chrono.r
+	file: %chrono-win32.r
 	version: 1.0.3
 	date: 2013-9-12
 	author: "Maxim Olivier-Adlhoch"
@@ -11,7 +11,7 @@ rebol [
 	note: {slim Library Manager is Required to use this module.}
 
 	; -- slim - Library Manager --
-	slim-name: 'chrono
+	slim-name: 'chrono-win32
 	slim-version: 1.2.1
 	slim-prefix: none
 	slim-update: http://www.revault.org/downloads/modules/chrono.r
@@ -58,30 +58,39 @@ rebol [
 ;------------------------------
 ; MICROSOFT WINDOWS(r) systems
 ;------------------------------
-either system/version/4 = 3 [
+;either system/version/4 = 3 [
 
 	slim/register [
-		;=====================================================
-		;                     libs
-		;=====================================================
+		;-                                                                                                       .
+		;-----------------------------------------------------------------------------------------------------------
+		;
+		;- LIBS
+		;
+		;-----------------------------------------------------------------------------------------------------------
 		k32-lib: load/library join to-rebol-file get-env "systemroot" %"/system32/Kernel32.dll"
 		
-		
-		
-		;=====================================================
-		;                     structs
-		;=====================================================
+
+
+		;-                                                                                                       .
+		;-----------------------------------------------------------------------------------------------------------
+		;
+		;- STRUCTS
+		;
+		;-----------------------------------------------------------------------------------------------------------
 		; MSDN docs here: http://msdn.microsoft.com/en-us/library/aa383713%28VS.85%29.aspx
 		i64-struct: make struct! [
 			low [integer!]
 			hi [integer!]
-		] [ 0 0]
+		] [ 0 0 ]
 		
 		
 		
-		;=====================================================
-		;                     routines
-		;=====================================================
+		;-                                                                                                       .
+		;-----------------------------------------------------------------------------------------------------------
+		;
+		;- ROUTINES
+		;
+		;-----------------------------------------------------------------------------------------------------------
 		QueryPerformanceCounter: make routine! compose/deep [
 			; MSDN docs here: http://msdn.microsoft.com/en-us/library/ms644904%28v=VS.85%29.aspx
 			time-ptr [struct* [(first i64-struct)]]
@@ -94,9 +103,14 @@ either system/version/4 = 3 [
 		] k32-lib "QueryPerformanceFrequency"
 		
 		
-		;=====================================================
-		;                     functions
-		;=====================================================
+		
+		;-                                                                                                       .
+		;-----------------------------------------------------------------------------------------------------------
+		;
+		;- FUNCTIONS
+		;
+		;-----------------------------------------------------------------------------------------------------------
+
 		;-----------------
 		;-    i64-to-float()
 		;	
@@ -116,7 +130,8 @@ either system/version/4 = 3 [
 		;-----------------
 		;-    get-tick()
 		;
-		; this is an internal routine and should not be called directly.
+		; this is an internal routine and its return value should not be inspected, 
+		; it may be implemented in various ways (using various types) accross platform.
 		;-----------------
 		;
 		; CAUTION! no error checking done for speed reasons. 
@@ -157,7 +172,7 @@ either system/version/4 = 3 [
 		; majority of cases, this simple func is ok.
 		;
 		; AFAIK, the BIOS or HAL should synchronise both clocks (or always return the 
-		; clock for the same CPU), but some multi-processor motherboards might have issues.
+		; clock for the same CPU), but some multi-CPU motherboards might have issues.
 		;-----------------
 		time-lapse: funcl [
 			blk [block!]
@@ -169,48 +184,132 @@ either system/version/4 = 3 [
 		]
 		
 		
-		;-----------------
+		
+		
+		
+		;--------------------------
+		;-    tick-lapse()
+		;--------------------------
+		; purpose:  returns time since given tick
+		;
+		; inputs:   
+		;
+		; returns:  
+		;
+		; notes:    we don't yet handle counter wrap-around
+		;
+		; to do:    
+		;
+		; tests:    
+		;--------------------------
+		tick-lapse: funcl [
+			tick [decimal!]
+		][
+			to-time ((get-tick - tick) / GLOBAL_TICK-RESOLUTION)
+		]
+		
+		
+		;--------------------------
 		;-    chrono-time()
-		;-----------------
+		;--------------------------
+		; purpose:  returns a precise current time based on cpu frequency counter.
+		;
+		; notes:    we don't yet handle frequency counter wrap-around (when/if it gets past 64 bits, it starts again at 0)
+		;--------------------------
 		chrono-time: func [
 		][
 			GLOBAL_CHRONO-TIMED + to-time ((get-tick - GLOBAL_CHRONO-INITIAL-TICK) / GLOBAL_TICK-RESOLUTION)
 		]
 		
+		;--------------------------
+		;-    start-laps()
+		;--------------------------
+		; purpose:  reset lap time counter global start
+		;
+		; notes:    also resets last lap time (obviously)
+		;--------------------------
+		start-laps: funcl [
+			/extern GLOBAL_LAST-LAP-TIME  GLOBAL_LAP-START-TIME
+		][
+			GLOBAL_LAP-START-TIME: chrono-time
+			GLOBAL_LAST-LAP-TIME: GLOBAL_LAP-START-TIME
+		]
+		
+		;--------------------------
+		;-    lap()
+		;--------------------------
+		; purpose:  time since last call to lap or START-LAPS
+		;
+		; notes:    this is useful to time each part of a process, just call lap between them.
+		;--------------------------
+		lap: funcl [
+			/extern GLOBAL_LAST-LAP-TIME  
+		][
+			now: chrono-time
+			;?? now
+			;?? GLOBAL_LAST-LAP-TIME
+			rval: difference now GLOBAL_LAST-LAP-TIME  ; ((now - GLOBAL_LAST-LAP-TIME) / GLOBAL_TICK-RESOLUTION)
+			GLOBAL_LAST-LAP-TIME: now
+			rval
+		]
+		
+		;--------------------------
+		;-    laps-time()
+		;--------------------------
+		; purpose:  get total time elapsed from START-LAPS to last call to LAP
+		;--------------------------
+		laps-time: funcl [][
+			rval: difference  GLOBAL_LAST-LAP-TIME GLOBAL_LAP-START-TIME ; to-time (( GLOBAL_LAST-LAP-TIME - GLOBAL_LAP-START-TIME ) / GLOBAL_TICK-RESOLUTION)
+		]
 		
 		
 		
-		;=====================================================
-		;                     GLOBALS
-		;=====================================================
+		;-                                                                                                       .
+		;-----------------------------------------------------------------------------------------------------------
+		;
+		;- GLOBALS
+		;
+		; globals at the end cause we need the functions to be defined to setup default and reference values
+		;-----------------------------------------------------------------------------------------------------------
+
 		; used for converting to time 
 		GLOBAL_TICK-RESOLUTION: second get-tick-resolution
 		
 		; used to provide more precise time via chrono-time
 		GLOBAL_CHRONO-TIMED: now/precise
 		GLOBAL_CHRONO-INITIAL-TICK: get-tick
+
+		GLOBAL_LAP-START-TIME: chrono-time
+		GLOBAL_LAST-LAP-TIME: chrono-time
+		
+
+		
+		
+		
 	
 	]
-][
-	slim/register [
-		;------------------------------
-		;--- All others platforms	
-		;------------------------------
-	
-	
-		chrono-time: :now
-		time-lapse: :dt
-	]
-]	
-	
+;][
+;	slim/register [
+;		;------------------------------
+;		;--- All others platforms	
+;		;------------------------------
+;	
+;		get-tick: func [][now/precise]
+;		tick-lapse: func [tick][difference now/precise tick]
+;	
+;		chrono-time: :now
+;		time-lapse: :dt
+;	]
+;]	
+;	
 ;=====================================================
 ;                     TESTS
 ;=====================================================
 ; un-comment to test library
-comment [
-	probe time-lapse [print "."]
-	probe time-lapse [prin "."]
-	probe time-lapse [sine 45]
-	probe time-lapse [wait 1.75] ; this highlights how imprecise the rebol timers really are on windows!
-	ask "!"
-]
+;comment [
+;	probe time-lapse [print "."]
+;	probe time-lapse [prin "."]
+;	probe time-lapse [sine 45]
+;	probe time-lapse [wait 1.75] ; this highlights how imprecise the rebol timers really are on windows!
+;	ask "!"
+;]
