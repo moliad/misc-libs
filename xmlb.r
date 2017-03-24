@@ -227,6 +227,8 @@ slim/register [
 		
 		preserve-comments: false
 		
+		namespaces-as-dot: false
+		
 		lit-slash: to-lit-word "/" 
 		empty-tag-end: ## ;MOA
 		
@@ -414,12 +416,16 @@ slim/register [
 			code [string!] "XML code to parse"
 			/keep-header "loaded xml includes simily header as the first item of schema"
 			/preserve "Preserve comments"
+			/dot.ns [logic! none!]
 			/local data
 		][
 			vin "xmlb/xml2rebxml()"
 			preserve-comments: either preserve [true] [false]
 		
 			xml-length-callback length? code
+		
+			self/namespaces-as-dot: not not dot.ns
+		
 		
 			clear output
 			clear xml-header
@@ -430,7 +436,7 @@ slim/register [
 			either any [
 				enc-name = "ISO-8859-1" 
 				enc-name = "Windows-1252"
-			] [
+			][
 				input-str: code
 			][
 				input-str: make string! 16384
@@ -465,8 +471,14 @@ slim/register [
 			tag [tag! string!]
 			/local nse
 		][
+			
 			if nse: find/tail tag ":" [
-				change/part tag "" nse
+				either namespaces-as-dot [
+					nschar: "."
+				][
+					nschar: ""
+				]
+				change/part tag nschar nse
 				nse: none
 			]
 			tag
@@ -595,6 +607,7 @@ slim/register [
 			/keep-header
 			/comments
 			/qualified
+			/dot.ns
 			/local xblk rblk item tag attr datatag? 
 		][
 		vin "xmlb/load()"
@@ -612,6 +625,7 @@ slim/register [
 				if comments [append opt 'comments]
 				if keep-header [append opt 'header]
 				if qualified [append opt 'qualified]
+				if dot.ns [append opt 'dot.ns]
 			]
 
 			
@@ -632,15 +646,15 @@ slim/register [
 					all [
 						find opt 'header
 						find opt 'comments
-						xml2rebxml/keep-header/preserve xml
+						xml2rebxml/keep-header/preserve/dot.ns xml dot.ns
 					]
 					all [
 						find opt 'header
-						xml2rebxml/keep-header xml
+						xml2rebxml/keep-header/dot.ns xml dot.ns
 					]
 					all [
 						find opt 'comments
-						xml2rebxml/preserve xml
+						xml2rebxml/preserve/dot.ns xml dot.ns
 					]
 					
 					xml2rebxml xml
@@ -948,7 +962,7 @@ slim/register [
 		
 		
 		;--------------------------
-		;-         is-cdata-element?()
+		;-     is-cdata-element?()
 		;--------------------------
 		; purpose:  
 		;
@@ -1061,7 +1075,7 @@ slim/register [
 		
 	
 		;--------------------------
-		;-         encode-xml-content()
+		;-     encode-xml-content()
 		;--------------------------
 		; purpose:  
 		;
@@ -1121,6 +1135,8 @@ slim/register [
 		
 		;-----------------
 		;-     mold-xml()
+		;
+		; note that if you use /dot.ns on load-xml, it will preset the mold, to use the same format
 		;-----------------
 		mold-xml: func [
 			xml [block!]
@@ -1161,6 +1177,7 @@ slim/register [
 				; sub element
 				until [
 					either issue? pick xml 1 [
+						; tagname is a a bogus value, just to align the data to an even number (always [ tag data ... ])
 						set [tagname namespace tag data] xml
 						;end-tag: tag
 						;tag: rejoin ["" namespace ":" to-string tag]
@@ -1168,16 +1185,27 @@ slim/register [
 						set [tag data] xml
 						namespace: none
 						tagname: none
-						;end-tag: tag
 					]
-					
+
 					;----
 					; remove "!" from tag name (which is used to automatically wrap all data within a CDATA)
 					if cdata?: is-cdata-element? tag [
 						tag: to-word next to-string tag
 					]
+					
+					if namespaces-as-dot [
+						namespace: any [
+							namespace ; user may want to replace namesplaces so he put them manually.
+							all [
+								tagname: find to-string tag "."
+								namespace: copy/part tag tagname
+								tag: tagname
+								namespace
+							]
+						]
+					]
 				
-						end-tag: tag
+					end-tag: tag
 				
 					; add namespace to the tag part of the element (not end-tag)
 					if namespace [
