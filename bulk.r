@@ -297,7 +297,11 @@ REBOL [
 ;
 ;--------------------------------------
 
+
 slim/register [
+
+	xmlb: slim/open/expose 'xmlb none [load-xml mold-xml]
+	
 	;-                                                                                                       .
 	;-----------------------------------------------------------------------------------------------------------
 	;
@@ -451,6 +455,43 @@ slim/register [
 	all*: :all
 	
 	;--------------------------
+	;-     load-data()
+	;--------------------------
+	; purpose:  Get content string
+	;
+	; inputs:   
+	;
+	; returns:  
+	;
+	; notes:    Used by all <FORMAT>-to-bulk() functions
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	load-data: funcl [
+		data [string! file! binary!]	"Path of the datafile, or its binary|string content"
+	][
+		vin "load-data()"
+		data: switch type?/word data [
+			file! [
+				; If given a file, read the file to get its content to parse
+				to-string read/binary data
+			]
+			binary! [
+				; If given a binary, convert it to a string for parsing
+				to-string data
+			]
+			string! [
+				; If given a string, take it as is
+				data
+			]
+		]
+		vout
+		data
+	]
+	
+	;--------------------------
 	;-     parse-csv()
 	;--------------------------
 	; purpose:  Parses a csv string and returns its data in a block
@@ -547,35 +588,21 @@ slim/register [
 		csv-data	[string! file! binary!]	"Path of the csv file, or its binary|string content"
 		/header								"Will store the first row as bulk labels"
 	][
-		csv-data: switch type?/word csv-data [
-			file! [
-				; If given a file, read the file to get its content to parse
-				to-string read/binary csv-data
-			]
-			binary! [
-				; If given a binary, convert it to a string for parsing
-				to-string csv-data
-			]
-			string! [
-				; If given a string, take it as is
-				csv-data
-			]
-		]
-		
+	
+		csv-data: load-data csv-data
+		?? csv-data
 		; - Data integrity verification
 		; If the data has more than one row, it should contain at least one crlf
 		; The absence of clrf might indicate a wrong file reading => WARNING
 		unless find csv-data crlf [
-			print "==============================================================="
-			print "WARNING! (csv-to-bulk): No crlf found in data"
-			print {Please use [to-string read/binary <file-path>] to read the file}
-			print "If the data contains only one row, you can ignore this warning"
-			print "==============================================================="
+			vprint "==============================================================="
+			vprint "WARNING! (csv-to-bulk): No crlf found in data"
+			vprint {Please use [to-string read/binary <file-path>] to read the file}
+			vprint "If the data contains only one row, you can ignore this warning"
+			vprint "==============================================================="
 		]
 		
 		parsed-result: parse-csv csv-data
-		
-		?? parsed-result
 		
 		either header [
 			; Extract header row from the data
@@ -586,7 +613,7 @@ slim/register [
 			lbl-lit-words: copy []
 			foreach lbl head-row [repend lbl-lit-words to-lit-word lbl]
 			labels: compose/only [labels: (lbl-lit-words)]
-						
+			
 			make-bulk/records/properties .column-count parsed-result labels
 		][
 			make-bulk/records .column-count parsed-result
@@ -703,6 +730,115 @@ slim/register [
 		]
 		
 		content
+	]
+	
+	;--------------------------
+	;-     xml-to-bulk()
+	;--------------------------
+	; purpose:  
+	;
+	; inputs:   Valid XML formatted as
+	;	{<Root>
+	;		<Table key1="val1" key2="val2" ... />
+	;		<Table key1="val1" key2="val2" ... />
+	;		...
+	;	</Root>}
+	;
+	; returns:  
+	;
+	; notes:    
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	xml-to-bulk: funcl [
+		xml-data	[string! file! binary!]	"Path of the xml file, or its binary|string content"
+	][
+		vin "xml-to-bulk()"
+		; Use xmlb Library to load xml string
+		loaded-data: load-xml load-data xml-data
+		; Extract only key-values block for each entry
+		values: extract/index loaded-data/Root 2 2
+		
+		; Generate labels
+		labels: none
+		lbl-lit-words: copy []
+		bulk-valid-values: copy []
+		column-count: 0
+		foreach entry values [
+			foreach [key value] entry [
+				unless labels [
+					; On first entry, generate labels...
+					append lbl-lit-words to-lit-word key
+					; ...and count columns number
+					column-count: column-count + 1
+				]
+				append bulk-valid-values value
+			]
+			labels: compose/only [labels: (lbl-lit-words)]
+		]
+		
+		res-bulk: make-bulk/records/properties column-count bulk-valid-values labels
+		
+		vout
+		res-bulk
+	]
+	
+	;--------------------------
+	;-     bulk-to-xml()
+	;--------------------------
+	; purpose:  
+	;
+	; inputs:   
+	;
+	; returns:  The resulting XML will be formatted as 
+	;	{<Root>
+	;		<Table key1="val1" key2="val2" ... />
+	;		<Table key1="val1" key2="val2" ... />
+	;		...
+	;	</Root>}
+	;
+	; notes:    
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	bulk-to-xml: funcl [
+		blk		[block!]	"The bulk to convert to an XML string"
+	][
+		vin "bulk-to-xml()"
+		; Convert bulk to an xmlb structure
+		table-content: []
+		labels: get-bulk-property blk 'labels
+		col-nbr: get-bulk-property blk 'columns
+		entry-content: copy []
+		
+		ci: 0 ; Current index
+		foreach value next blk [
+			val-index: (mod ci col-nbr) + 1 ; Int from 1 to col-nbr
+			val-lbl: pick labels val-index ; Current label
+			
+			repend entry-content [to-word val-lbl value]
+			
+			; Reset accumulator at last entry value
+			
+			if val-index = col-nbr [
+				append table-content compose/only [Table (entry-content)]
+				entry-content: copy []
+			]
+			
+			ci: ci + 1
+			
+		]
+		
+		rxmlb: compose/only [Root (table-content)]
+		
+		xml-string: mold-xml rxmlb
+		
+		vout
+		xml-string
 	]
 	
 	;-----------------
@@ -1351,7 +1487,43 @@ slim/register [
 		;vout
 	]
 	
-	
+	;--------------------------
+	;-     merge-bulks()
+	;--------------------------
+	; purpose:  Merge 2 bulks if their number of cols match
+	;
+	; inputs:   
+	;
+	; returns:  The merged bulks as one bulk
+	;
+	; notes:    In case of labeled cols, the ones from the first one are kept
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	merge-bulks: funcl [
+		blk1	[block!]
+		blk2	[block!]
+	][
+		vin "merge-bulks()"
+		; Args checking
+		result: either all [
+			is-bulk? blk1
+			is-bulk? blk2
+			symmetric-bulks? blk1 blk2
+		][
+			accumulator: copy blk1
+			append accumulator next blk2	
+		][
+			print "ERROR! (merge-bulks): The 2 provided bulks are incompatible or wrongly typed"
+			none
+		]
+		
+		
+		vout
+		result
+	]
 	
 ]
 
