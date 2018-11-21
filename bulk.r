@@ -1129,6 +1129,29 @@ slim/register [
 	]
 	
 
+	;--------------------------
+	;-     column-labels()
+	;--------------------------
+	; purpose:  return the name of columns for the given bulk
+	;
+	; inputs:   
+	;
+	; returns:  
+	;
+	; notes:    will return none if they are not set.
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	column-labels: funcl [
+		bulk [block!]
+	][
+		;vin "column-labels()"
+		get-bulk-property  bulk 'labels
+		;vout
+	]
+
 
 	;-----------------
 	;-     search-bulk-column()
@@ -1216,12 +1239,11 @@ slim/register [
 	;-----------------
 	;-     get-bulk-property
 	;-----------------
-	get-bulk-property: func [
+	get-bulk-property: funcl [
 		blk [block!]
 		prop [word! lit-word! set-word!]
 		/index "return the index of the property set-word: instead of its value"
 		/block "return the header at position of property instead of its value"
-		/local hdr item
 	][
 		all [
 			block? hdr: pick blk 1
@@ -1380,6 +1402,127 @@ slim/register [
 		
 		first reduce [ bulk-res bulk-res: none ]
 	]
+
+
+	;--------------------------
+	;-     compare()
+	;--------------------------
+	; purpose:  
+	;
+	; inputs:   
+	;
+	; returns:  
+	;
+	; notes:    
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	compare: funcl [
+		bulk-a [block!]
+		bulk-b [block!]
+		/where  where-clause  [block! none!] "select what rows to include in output (default: all rows)"
+		/select select-clause [block! none!] {define how the output is generated. (default: none! when ==, rejoin [ a.col "!=" b.col] when different) }
+		/default def-value	  "what value to use by default when there is no difference (default: none!)"
+	][
+		vin "compare()"
+		
+		; by default, output all rows
+		where-clause:   any [ where-clause #[true] ]
+		
+		cols-a: column-labels bulk-a
+		cols-b: column-labels bulk-b
+		
+		;---
+		; generate default column names if labels are not explicit in bulks
+		unless cols-a [
+			cols-a: copy []
+			repeat i bulk-columns bulk-a [
+				append cols-a to-word rejoin ["col" i]
+			]
+		]
+		unless cols-b [
+			cols-b: copy []
+			repeat i bulk-columns bulk-b [
+				append cols-b to-word rejoin ["col" i]
+			]
+		]
+		
+		unless select-clause [
+			
+			
+			;---
+			; find common columns
+			common-columns: intersect cols-a cols-b
+			
+			;---
+			; find specific columns (not used for now)
+			;columns-a: exclude cols-a common-columns
+			;columns-b: exclude cols-b common-columns
+			
+			v?? common-columns
+			;v?? columns-a
+			;v?? columns-b
+			
+			;---
+			; add common columns
+			select-clause: copy [
+			]
+			
+			foreach col common-columns [
+				clause: reduce [
+					;---
+					; have fun reading following expression  ;-)
+					; it generates something like so :   col1: either a.col1 <> b.col1 [rejoin [a.col1 "!=" b.col1]] [#[none]] 
+					to-set-word col 'either a-word: to-word rejoin ["a." col ] to-word "<>" b-word: to-word rejoin ["b." col ] compose/deep [rejoin [(a-word) "!=" (b-word)]] [#[none]]   ;  [ a.col "!=" b.col]
+				]
+				new-line clause true
+				append select-clause clause
+			]
+			
+			;---
+			; add bulk-b specific columns 
+			v?? select-clause
+		]
+		
+		
+		
+ 		; to do
+ 		
+ 		; extract set words from select-clause
+		; (output-columns)
+		; 
+		; build a set-word version of cols-b to insert within context to keep binding local ...
+		
+		
+		where-clause: [ print a.col1]
+		ctx: none
+		
+		compiled-query: [
+			**i: 1
+			output: make-bulk/properties length? output-columns compose/only [labels: (output-columns)]
+			ctx: context [
+				(b-setwords) ; block of setwords
+				(select-clause-words) ; block of setwords
+				foreach (cols-a) [
+					set (cols-b) get-bulk-row bulk-b **i 
+					++ **i
+					
+					if do (where-clause) [
+						append output reduce (select-clause)
+					]
+				]
+			]
+		]
+		do compose/deep/only compiled-query
+		result: ctx/output
+		vout
+		
+		result
+	]
+
+
 
 
 	;-----------------
