@@ -309,97 +309,6 @@ slim/register [
 	;
 	;-----------------------------------------------------------------------------------------------------------
 	
-	;--------------------------
-	;-     	whitespaces:
-	;
-	;--------------------------
-	=space=: charset [ #" " #"^(A0)" #"^(8D)"   #"^(8F)"   #"^(90)" ]
-	=tab=: charset "^-"
-	=spacer=: union =space= =tab=
-	=spacers=: [some =spacer=]
-	=nl=: [ opt =cr= =lf= (++ .line-count)]
-	=cr=: #"^M"
-	=lf=:  #"^/" 
-	
-	;--------------------------
-	;-     	collectors:
-	;
-	;--------------------------
-	!collect!: [(append .value .txt)]
-	!collect-value!: [(append .row copy .value clear .value)]
-
-	;--------------------------
-	;-     	=separator=:
-	;
-	;--------------------------
-	=separator=: charset ","
-
-
-	;--------------------------
-	;-     	=quoted-chars=:
-	;
-	;--------------------------
-	=quoted-chars=: complement charset {"^/^M} ; note we consider the ^/ directly in the rule, to increment line number
-	;--------------------------
-	;-     	=unquoted-chars=:
-	;
-	;--------------------------
-	=unquoted-chars=: complement union =separator= charset {^/^M}
-
-	;--------------------------
-	;-     	=qvalue=:
-	;
-	;--------------------------
-	=qvalue=: [
-		{"} 
-		;(print {"})
-		some [ 
-			  [{""} (append .value {"})]
-			| [
-				copy .txt 
-				some [
-					=quoted-chars=  
-					| =lf= (++ .line-count)
-				]
-				!collect! 
-			]
-		]
-		{"}
-	]
-	;--------------------------
-	;-     	=uqvalue=:
-	;
-	;--------------------------
-	=uqvalue=: [
-		copy .txt some =unquoted-chars= !collect!
-	]
-
-	;--------------------------
-	;-     	=value=:
-	;
-	;--------------------------
-	=value=: [
-		[
-		 	 =qvalue=  ;(prin "Q  - ")
-			| =uqvalue= ;(prin "UQ - ")
-		]
-		;(print .value)
-	]
-
-	;--------------------------
-	;-     	=row=:
-	;
-	;--------------------------
-	=row=:  [
-		=value=  !collect-value! 
-		any [
-			=separator= ;(print "separator")
-			=value= !collect-value!  
-		]
-		
-	]
-
-
 	
 	
 	;-                                                                                                       .
@@ -409,127 +318,165 @@ slim/register [
 	;
 	;-----------------------------------------------------------------------------------------------------------
 	; declare words to bind locally to context
-	;--------------------------
-	;-     	.table:
-	;
-	;--------------------------
-	.table: []
-	;--------------------------
-	;-     	.row:
-	;
-	;--------------------------
-	.row: []
-	;--------------------------
-	;-     	.value:
-	;
-	;--------------------------
-	.value: ""
-	;--------------------------
-	;-     	.here:
-	;
-	;--------------------------
-	.here: .txt: none
-	;--------------------------
-	;-     	.column-count:
-	;
-	;--------------------------
-	.column-count: .old-column-count: none
-	;--------------------------
-	;-     	.line-count:
-	;
-	;--------------------------
-	.line-count: 0
-	;--------------------------
-	;-     	parsed-all?:
-	;
-	;--------------------------
-	parsed-all?: false	
-	
-	;-                                                                                                       .
-	;-----------------------------------------------------------------------------------------------------------
-	;
-	;- FUNCTIONS
-	;
-	;-----------------------------------------------------------------------------------------------------------
-	
-	all*: :all
 	
 	;--------------------------
-	;-     load-data()
+	;-     CSV-CTX: [...]
+	;
+	; Used to store the transient values of the csv file parser
 	;--------------------------
-	; purpose:  Get content string
-	;
-	; inputs:   
-	;
-	; returns:  
-	;
-	; notes:    Used by all <FORMAT>-to-bulk() functions
-	;
-	; to do:    
-	;
-	; tests:    
-	;--------------------------
-	load-data: funcl [
-		data [string! file! binary!]	"Path of the datafile, or its binary|string content"
-	][
-		vin "load-data()"
-		data: switch type?/word data [
-			file! [
-				; If given a file, read the file to get its content to parse
-				to-string read/binary data
+	csv-ctx: context [
+		;--------------------------
+		;-         .table:
+		;
+		;--------------------------
+		.table: []
+		
+		;--------------------------
+		;-         .row:
+		;
+		;--------------------------
+		.row: []
+		
+		
+		;--------------------------
+		;-         tag-row-end:
+		;
+		; Will add ___ROW-END___ at the end of each rows in the table result
+		;--------------------------
+		tag-row-end: none
+		
+
+		
+		;--------------------------
+		;-         .value:
+		;
+		;--------------------------
+		.value: ""
+		
+		;--------------------------
+		;-         .here:
+		;
+		;--------------------------
+		.here: none
+		.txt: none
+		
+		;--------------------------
+		;-         .column-count:
+		;
+		;--------------------------
+		.column-count: none
+		.old-column-count: none
+		
+		;--------------------------
+		;-         .line-count:
+		;
+		;--------------------------
+		.line-count: 0
+		
+		
+		;--------------------------
+		;-         whitespaces:
+		;
+		;--------------------------
+		=space=:	charset [ #" " #"^(A0)" #"^(8D)"   #"^(8F)"   #"^(90)" ]
+		=tab=:		charset "^-"
+		=spacer=:	union =space= =tab=
+		=spacers=:	[some =spacer=]
+		=nl=:		[ opt =cr= =lf= (++ .line-count)]
+		=cr=:		#"^M"
+		=lf=:		#"^/" 
+		
+		;--------------------------
+		;-         collectors:
+		;
+		;--------------------------
+		!collect!: [(append .value .txt)]
+		!collect-value!: [(append .row copy .value clear .value)]
+
+		;--------------------------
+		;-         =separator=:
+		;
+		;--------------------------
+		=separator=: charset ","
+
+		;--------------------------
+		;-         =quoted-chars=:
+		;
+		;--------------------------
+		=quoted-chars=: complement charset {"^/^M} ; note we consider the ^/ directly in the rule, to increment line number
+		
+		;--------------------------
+		;-         =unquoted-chars=:
+		;
+		;--------------------------
+		=unquoted-chars=: complement union =separator= charset {^/^M}
+
+		;--------------------------
+		;-         =qvalue=:
+		;
+		;--------------------------
+		=qvalue=: [
+			{"} 
+			;(print {"})
+			some [ 
+				  [{""} (append .value {"})]
+				| [
+					copy .txt 
+					some [
+						=quoted-chars=  
+						| =lf= (++ .line-count)
+					]
+					!collect! 
+				]
 			]
-			binary! [
-				; If given a binary, convert it to a string for parsing
-				to-string data
+			{"}
+		]
+		
+		;--------------------------
+		;-         =uqvalue=:
+		;
+		;--------------------------
+		=uqvalue=: [
+			copy .txt some =unquoted-chars= !collect!
+		]
+
+		;--------------------------
+		;-         =value=:
+		;
+		;--------------------------
+		=value=: [
+			[
+			 	 =qvalue=  ;(prin "Q  - ")
+				| =uqvalue= ;(prin "UQ - ")
 			]
-			string! [
-				; If given a string, take it as is
-				data
+			;(print .value)
+		]
+
+		;--------------------------
+		;-         =row=:
+		;
+		;--------------------------
+		=row=:  [
+			=value=  !collect-value! 
+			any [
+				=separator= ;(print "separator")
+				=value= !collect-value!  
 			]
 		]
-		vout
-		data
-	]
-	
-	;--------------------------
-	;-     parse-csv()
-	;--------------------------
-	; purpose:  Parses a csv string and returns its data in a block
-	;
-	; inputs:   
-	;
-	; returns:  
-	;
-	; notes:    
-	;
-	; to do:    
-	;
-	; tests:    
-	;--------------------------
-	parse-csv: funcl [
-		data	[string!]	"The data to parse"
 		
-		/tag-row-end	"Will add ___ROW-END___ at the end of each rows in the table result"
-		/extern .table .row .value .here .txt .column-count .old-column-count .line-count parsed-all?
-	][
-		; We want to reinitialize context between each call
-		.table: copy []
-		.row: copy []
-		.value: copy ""
-		.here: .txt: none
-		.column-count: .old-column-count: none
-		.line-count: 0
-		parsed-all?: false
-		
-		; Parsing
-		parsed-all?: parse/all data [
-			some[
+				
+		;--------------------------
+		;-         =csv=:
+		;
+		;--------------------------
+		=csv=: [
+			some [
 				.here:
 				;(print .here)
 				;(print first .here)
 				[
 					[
-						=row= ;(print "END ROW")
+						=row= (print "END ROW")
 						[ =nl= | end ]
 						(
 							
@@ -539,7 +486,7 @@ slim/register [
 							;++ .line-count
 							.old-column-count: .column-count
 							.column-count: length? .row
-							;(?? .column-count)
+							(?? .column-count)
 							
 							all [
 								.old-column-count
@@ -564,9 +511,193 @@ slim/register [
 			]
 		]
 
-		;new-line/skip .table true .column-count ; <SMC> Crashes with empty string (I think...)
+
+		;--------------------------
+		;-         init()
+		;--------------------------
+		; purpose:  initialise or reset the parse-ctx
+		;
+		; inputs:   
+		;
+		; returns:  
+		;
+		; notes:    
+		;
+		; to do:    
+		;
+		; tests:    
+		;--------------------------
+		init: func [][
+			vin "bulk.r/csv-ctx/init()"
+			.table: copy []
+			.row: copy []
+			.value: copy ""
+			.here: none
+			.txt: none
+			.column-count: none
+			.old-column-count: none
+			.line-count: 0
+			vout
+		]
+	]
+
+
+	;-                                                                                                       .
+	;-----------------------------------------------------------------------------------------------------------
+	;
+	;- UTILITY CODE
+	;
+	;-----------------------------------------------------------------------------------------------------------
+
+	
+	;-----------------
+	;-     find-same()
+	;-----------------
+	find-same: func [
+		series [block!] "note this is not a bulk input but an arbitrary series type"
+		item [series! none! ]
+		/local s 
+	][
+		unless none? item [
+			while [s: find series item] [
+				if same? first s item [return  s]
+				series: next s
+			]
+		]
+		none
+	]
+	
+
+
+	;-                                                                                                       .
+	;-----------------------------------------------------------------------------------------------------------
+	;
+	;- INSPECTION AND CORE CREATION
+	;
+	;-----------------------------------------------------------------------------------------------------------
+	
+	;-----------------
+	;-     is-bulk?
+	;
+	; returns true if data complies to all required bulk prerequisites (including type)
+	;-----------------
+	is-bulk?: func [		
+		blk 
+		/header "Only verify header, content might not match columns number"
+		/local cols
+	][
+		all [
+			block? blk
+			integer? cols: get-bulk-property blk 'columns
+			any [
+				header
+				0 = mod ((length? blk) - 1) cols
+			]
+		]
+	]
+	
+	
+	;-----------------
+	;-     symmetric-bulks?()
+	;
+	; returns true if both bulks are of same shape.
+	;
+	; currently this only makes sure both bulks have the same number of columns.
+	; eventually, if the bulks have column labels, they should be in the same order.
+	;-----------------
+	symmetric-bulks?: func [
+		blk [block!]
+		blk2 [block!]
+		/strict "this will trigger a stricter verification (undefined for now)"
+	][
+		(bulk-columns blk) = (bulk-columns blk2)
+	]
+	
 		
-		copy .table
+	;-                                                                                                       .
+	;-----------------------------------------------------------------------------------------------------------
+	;
+	;- FILE i/o FUNCTIONS
+	;
+	;-----------------------------------------------------------------------------------------------------------
+	
+	;--------------------------
+	;-     read-data()
+	;--------------------------
+	; purpose:  Get content string
+	;
+	; inputs:   
+	;
+	; returns:  
+	;
+	; notes:    Used by all <FORMAT>-to-bulk() functions
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	read-data: funcl [
+		data [string! file! binary!]	"Path of the datafile, or its binary|string content"
+	][
+		vin "read-data()"
+		data: switch type?/word data [
+			file! [
+				;---
+				; If given a file, read the file to get its content to parse
+				;
+				; /binary is important because many text formats are actually binary in specification
+				;         ex: XML and CSV are NOT text formats, but binary.  there are subtle
+				;             details like newlines and encodings which depend of very specific
+				;             characters which cannot be mangled.
+				;---
+				to-string read/binary data
+			]
+			binary! [
+				; If given a binary, convert it to a string for parsing
+				to-string data
+			]
+			string! [
+				; If given a string, take it as is
+				data
+			]
+		]
+		vout
+		data
+	]
+		
+
+	;--------------------------
+	;-     parse-csv()
+	;--------------------------
+	; purpose:  Parses a csv string and returns its data in a block
+	;
+	; inputs:   a binary loaded string of text
+	;
+	; returns:  just the table data, not yet in bulk format.
+	;
+	; notes:    - beware CRLF vs LF they are not treated the same by CSV parser.
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	parse-csv: funcl [
+		data	[string!]	"The data to parse"
+	][
+		vin "parse-csv()"
+		;---
+		; We want to reinitialize context between each call
+		csv-ctx/init
+		
+		unless parse/all data csv-ctx/=csv= [
+			to-error rejoin ["bulk/parse-csv : CSV format error here: " copy/part csv-ctx/.here 50 ]
+		]
+		
+		v?? csv-ctx/.table
+		
+		vout
+		
+		first reduce [ csv-ctx/.table csv-ctx/.table: none ]
 	]
 	
 	;--------------------------
@@ -578,19 +709,21 @@ slim/register [
 	;
 	; returns:  
 	;
-	; notes:    
+	; notes:    - we use the csv-ctx values after the call to 'PARSE-CSV
 	;
-	; to do:    
+	; to do:    /auto-fill  (use the ___ROW-END___ feature of csv parser to detect non symmetric rows)
 	;
 	; tests:    
 	;--------------------------
 	csv-to-bulk: funcl [
-		csv-data	[string! file! binary!]	"Path of the csv file, or its binary|string content"
-		/header								"Will store the first row as bulk labels"
+		csv-data	 [string! file! binary!]	"Path of the csv file, or its binary|string content"
+		/no-header	    "Will store the first row as bulk labels"
+		;/auto-fill  "will fill rows missing data (at end)"
 	][
-	
-		csv-data: load-data csv-data
-		?? csv-data
+		vin  "csv-to-bulk()"
+		csv-data: read-data csv-data
+		v?? csv-data
+		
 		; - Data integrity verification
 		; If the data has more than one row, it should contain at least one crlf
 		; The absence of clrf might indicate a wrong file reading => WARNING
@@ -604,20 +737,36 @@ slim/register [
 		
 		parsed-result: parse-csv csv-data
 		
-		either header [
-			; Extract header row from the data
-			head-row: copy/part parsed-result .column-count
-			remove/part parsed-result .column-count
-			
-			; Generate labels
-			lbl-lit-words: copy []
-			foreach lbl head-row [repend lbl-lit-words to-lit-word lbl]
-			labels: compose/only [labels: (lbl-lit-words)]
-			
-			make-bulk/records/properties .column-count parsed-result labels
-		][
-			make-bulk/records .column-count parsed-result
+		
+		cols: csv-ctx/.column-count
+		v?? cols
+		
+		;---
+		; Add column names to the bulk, take them from the first row
+		unless no-header [
+			head-row: take/part parsed-result cols
+			forall head-row [
+				change  head-row to-lit-word first head-row
+			]
+			labels: compose/only [labels: (head-row)] ; labels is none when /no-header is used
 		]
+
+		v?? parsed-result
+		v?? labels
+		ask "!"
+
+		;---
+		; create the bulk 		
+		bulk: make-bulk/records/properties cols parsed-result labels
+		vprobe type? bulk
+		new-line/skip next bulk true cols
+		
+		vout
+		
+		;---
+		; cleanup and return
+		first reduce [ bulk bulk: none ]
+
 	]
 	
 	;--------------------------
@@ -659,16 +808,21 @@ slim/register [
 	bulk-to-csv: funcl [
 		blk						[block!]
 		/write-to	output-file [file!]
+		/no-header "Do not output the header row."
 	][
 		result: ""
 		
+		vin "bulk-to-csv()"
+		
 		; Manage header
-		if labels: get-bulk-property bulk-test 'labels [
-			foreach lbl labels [
-				repend result [to-csv-content to-string lbl ","]
+		unless no-header [
+			if labels: get-bulk-property bulk-test 'labels [
+				foreach lbl labels [
+					repend result [to-csv-content to-string lbl ","]
+				]
+				remove back tail result ; Remove trailing comma
+				append result crlf
 			]
-			remove back tail result ; Remove trailing comma
-			append result crlf
 		]
 		
 		; Manage content rows
@@ -690,6 +844,7 @@ slim/register [
 		if write-to [
 			write/binary output-file to-binary result
 		]
+		vout
 		
 		result
 	]
@@ -713,21 +868,29 @@ slim/register [
 	to-csv-content: funcl [
 		content	[string!]
 	][
-		wrap: either any [
-			find content #"^""
-			find content #","
-			find content lf
-		][true][false]
+		;vin "to-csv-content()"
+		; this implementation is faster than the tightest parse   ( wrap: parse/all content [ any [=wrap-chars= ]] )
+		if find content #"," [
+			wrap?: true
+		]
 		
-		; Replace all crlf by lf
-		replace/all content crlf lf
+		if find content #"^"" [
+			; Escape double-quotes
+			wrap?: true
+			replace/all content {"} {""}
+		]
+	
+		if find content lf [
+			; csv cells should only contain Line feeds,
+			; so we remove the CR
+			replace/all content cr ""
+			wrap?: true
+		]
 		
-		; Escape double-quotes
-		replace/all content {"} {""}
-		
-		if wrap [
+		if wrap? [
 			content: rejoin [{"} content {"}]
 		]
+		;vout
 		
 		content
 	]
@@ -757,7 +920,7 @@ slim/register [
 	][
 		vin "xml-to-bulk()"
 		; Use xmlb Library to load xml string
-		loaded-data: load-xml load-data xml-data
+		loaded-data: load-xml read-data xml-data
 		; Extract only key-values block for each entry
 		values: extract/index loaded-data/Root 2 2
 		
@@ -840,46 +1003,223 @@ slim/register [
 		vout
 		xml-string
 	]
+		
 	
-	;-----------------
-	;-     is-bulk?
+	;-                                                                                                       .
+	;-----------------------------------------------------------------------------------------------------------
 	;
-	; returns true if data complies to all required bulk prerequisites (including type)
+	;- ROW MANIPULATION
+	;
+	;-----------------------------------------------------------------------------------------------------------
+	
+
+	
+	
+	;-                                                                                                       .
+	;-----------------------------------------------------------------------------------------------------------
+	;
+	;- COLUMN MANIPULATION
+	;
+	;-----------------------------------------------------------------------------------------------------------
+
 	;-----------------
-	is-bulk?: func [		
-		blk 
-		/header "Only verify header, content might not match columns number"
-		/local cols
+	;-     column-idx()
+	;-----------------
+	bulk-column-index: ; deprecated
+	;---
+	column-idx: funcl [
+		blk [block!]
+		column [integer! word! none!] "none! will select the default label column."
+		/default col [integer!] "If column is a word and property doesn't exist, use this column by default. Normally, we would raise an error."
 	][
-		all [
-			block? blk
-			integer? cols: get-bulk-property blk 'columns
-			any [
-				header
-				0 = mod ((length? blk) - 1) cols
+		vin [{column-idx()}]
+		colname: column
+		v?? column
+		switch type?/word column [
+			none! [
+				;return the index of the default label column
+				if col: get-bulk-property blk 'label-column [
+					idx: any [
+						all [
+							integer? col
+							col
+						]
+						; resolve it from labels
+						all [
+							word? col
+							integer? col: column-idx blk col
+							col
+						]
+					]
+				]
+			]
+			word! [
+				;column: column-idx blk column
+				idx: if block? labels: get-bulk-property blk 'labels [
+					if labels: find labels column [
+						index? labels
+					]
+				]
+				if all [
+					none? idx
+					col
+				][
+					idx: col
+				]
 			]
 		]
+		
+		unless integer? idx [
+			;to-error rejoin ["BULK/bulk-column-index(): specified column (" colname ") does not equate to an integer value"]
+			to-error rejoin ["BULK/bulk-column-index(): specified column (" colname ") doesn't map to a column index"]
+		]
+		
+		if idx > bulk-columns blk [
+			to-error rejoin ["BULK/bulk-column-index(): column index cannot be larger than number of columns in bulk: " column]
+		]	
+
+		vout
+		idx
 	]
 	
 	
 	;-----------------
-	;-     symmetric-bulks?()
+	;-     label-column-idx()
 	;
-	; returns true if both bulks are of same shape.
-	;
-	; currently this only makes sure both bulks have the same number of columns.
-	; eventually, if the bulks have column labels, they should be in the same order.
+	; returns an integer which identifies what is the label column for this bulk, if any
+	; returns none if none is defined.
+	;---
+	get-bulk-label-column: ; deprecated name
 	;-----------------
-	symmetric-bulks?: func [
+	label-column-idx: func [
 		blk [block!]
-		blk2 [block!]
-		/strict "this will trigger a stricter verification (undefined for now)"
+		/local col
 	][
-		(bulk-columns blk) = (bulk-columns blk2)
+		column-idx none
 	]
 	
 	
+	;-----------------
+	;-     column-idx()
+	;
+	; if columns are labeled, return the column index matching specified bulk
+	; returns none if no labels or name not in list.
+	;-----------------
+;	get-bulk-labels-index:  ; deprecated name
+;	;---
+;	column-idx: func [
+;		blk [block!]
+;		label [word!]
+;		/local labels
+;	][
+;		vin "column-idx()"
+;		v?? label
+;		idx: result: if block? labels: get-bulk-property blk 'labels [
+;			if labels: find labels label [
+;				index? labels
+;			]
+;		]
+;		
+;		v?? idx
+;		vout
+;		
+;		idx
+;	]
+
+
+	;-----------------
+	;-     bulk-columns()
+	;-----------------
+	bulk-columns: func [
+		blk [block!]
+	][
+		get-bulk-property blk 'columns
+	]
 	
+
+
+	;-----------------
+	;-     search-bulk-column()
+	;
+	; <to do> replace the search mechanism by my profiled fast-find() algorithm on altme.
+	;-----------------
+	all*: :all
+	search-bulk-column: func [
+		blk [block!]
+		column [word! integer!] "if its a word, it will get the column from that property (which must exist and be an integer)"
+		value
+		/same "series must be the exact same value, not a mere equality"
+		/row "return row instead of row index"
+		/all "value is a block of items to search, output is put in a block."
+		/local data columns rdata index
+	][
+		vin [{search-bulk-column()}]
+
+		column: bulk-column-index blk column
+
+		; generate search index		
+		index: extract at next blk column columns
+		
+		; perform search 
+		
+		either all [
+			; in this mode, we find ALL occurrences which match input, even if they occur more than once
+			
+			rdata: copy []
+			foreach item value [
+				until [
+					; in this mode, we return the FIRST item found only.
+					either  all* [
+						same
+						series? value
+					][
+						data: find-same index item
+					][
+						data: find index item
+					]
+					
+					not if data [
+						either row [
+							append/only rdata get-bulk-row blk index? data
+						][
+							append/only rdata index? data
+						]
+					]
+				]
+			]
+			data: rdata
+		][
+			; in this mode, we return the FIRST item found only.
+			either  all* [
+				same
+				series? value
+			][
+				data: find-same index value
+			][
+				data: find index value
+			]
+			
+			if data [
+				either row [
+					data: get-bulk-row blk index? data
+				][
+					data: index? data
+				]
+			]	
+		]
+		vout
+		index: rdata: value: blk: none
+		data
+	]
+		
+			
+	
+	;-                                                                                                       .
+	;-----------------------------------------------------------------------------------------------------------
+	;
+	;- PROPERTY MANIPULATION
+	;
+	;-----------------------------------------------------------------------------------------------------------
 	
 	;-----------------
 	;-     get-bulk-property
@@ -906,53 +1246,7 @@ slim/register [
 	]
 	
 	
-	;-----------------
-	;-     get-bulk-label-column()
-	;
-	; returns an integer which identifies what is the label column for this bulk, if any
-	; returns none if none is defined.
-	;-----------------
-	get-bulk-label-column: func [
-		blk [block!]
-		/local col
-	][
-		if col: get-bulk-property 'label-column [
-			any [
-				all [
-					integer? col
-					col
-				]
-				; resolve it from labels
-				all [
-					word? col
-					integer? col: get-bulk-labels-index blk col
-					col
-				]
-			]
-		]
-	]
-	
-	
-	;-----------------
-	;-     get-bulk-labels-index()
-	;
-	; if columns are labeled, return the column index matching specified bulk
-	; returns none if no labels or name not in list.
-	;-----------------
-	get-bulk-labels-index: func [
-		blk [block!]
-		label [word!]
-		/local labels
-	][
-		if block? labels: get-bulk-property 'labels [
-			if labels: find labels label [
-				index? labels
-			]
-		]
-	]
-	
-	
-	
+
 	
 	;-----------------
 	;-     set-bulk-property()
@@ -1001,167 +1295,69 @@ slim/register [
 		]
 	]
 	
+		
 	
-	
-	
-	;-----------------
-	;-     bulk-find-same()
-	;-----------------
-	bulk-find-same: func [
-		series [block!] "note this is not a bulk input but an arbitrary series type"
-		item [series! none! ]
-		/local s 
-	][
-		unless none? item [
-			while [s: find series item] [
-				if same? first s item [return  s]
-				series: next s
-			]
-		]
-		none
-	]
-	
-	
-	;-----------------
-	;-     search-bulk-column()
+	;-                                                                                                       .
+	;-----------------------------------------------------------------------------------------------------------
 	;
-	; <to do> replace the search mechanism by my profiled fast-find() algorithm on altme.
-	;-----------------
-	search-bulk-column: func [
+	;- DATA CONVERSION
+	;
+	;-----------------------------------------------------------------------------------------------------------
+
+
+
+	;-                                                                                                       .
+	;-----------------------------------------------------------------------------------------------------------
+	;
+	;- DATA QUERY
+	;
+	;-----------------------------------------------------------------------------------------------------------
+	select*: :select ; we don't actually use select in the bulk lib but just in case.
+	
+	;--------------------------
+	;-         	select()
+	;--------------------------
+	; purpose:  takes a bulk, performs an sql like SELECT statement on it.
+	;
+	; inputs:   supports a results spec and a where clause .
+	;
+	; returns:  a bulk which is possibly a subset of the given bulk, it is always a copy
+	;
+	; notes:    
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	select: funcl [
 		blk [block!]
-		column [word! integer!] "if its a word, it will get the column from that property (which must exist and be an integer)"
-		value
-		/same "series must be the exact same value, not a mere equality"
-		/row "return row instead of row index"
-		/all "value is a block of items to search, output is put in a block."
-		/local data columns rdata index
+		/where  where-clause  [block!] ; expects [column [integer! word! none!] filter [any!]]
+		/select select-clause [word! block! integer!]
 	][
-		vin [{search-bulk-column()}]
-
-		column: bulk-column-index blk column
-
-		; generate search index		
-		index: extract at next blk column columns
 		
-		; perform search 
-		
-		either all [
-			; in this mode, we find ALL occurrences which match input, even if they occur more than once
-			
-			rdata: copy []
-			foreach item value [
-				until [
-					; in this mode, we return the FIRST item found only.
-					either  all* [
-						same
-						series? value
-					][
-						data: bulk-find-same index item
-					][
-						data: find index item
-					]
-					
-					not if data [
-						either row [
-							append/only rdata get-bulk-row blk index? data
-						][
-							append/only rdata index? data
-						]
-					]
-				]
-			]
-			data: rdata
-		][
-			; in this mode, we return the FIRST item found only.
-			either  all* [
-				same
-				series? value
-			][
-				data: bulk-find-same index value
-			][
-				data: find index value
-			]
-			
-			if data [
-				either row [
-					data: get-bulk-row blk index? data
-				][
-					data: index? data
-				]
-			]	
-		]
-		vout
-		index: rdata: value: blk: none
-		data
 	]
-	
-	
-	;-----------------
-	;-     bulk-column-index()
-	;-----------------
-	bulk-column-index: func [
-		blk [block!]
-		column [integer! word! none!]
-		/default col [integer!] "If column is a word and property doesn't exist, use this column by default. Normally, we would raise an error."
-		/local colname
-	][
-		vin [{bulk-column-index()}]
-		colname: column
-		case [
-			none? column [
-				column: 1
-			]
-		
-			word? column [
-				column: get-bulk-property blk column
-				;v?? column
-				;v?? default
-				;v?? col
-				either all [
-					none? column
-					default
-				][
-					column: col
-				][
-					if none? column [
-						to-error rejoin ["BULK/bulk-column-index(): specified column name (" colname ") doesn't exist or is none"]
-					]
-					unless integer? column [
-						to-error ["BULK/bulk-column-index(): specified column (" colname ") does not equate to an integer value"]
-					]
-				]
-			]
-		]
-		
-		if column > bulk-columns blk [
-			to-error rejoin ["BULK/bulk-column-index(): column index cannot be larger than number of columns in bulk: " column]
-		]	
 
-		vout
-		column
-	]
-	
-	
+
 	
 	;-----------------
 	;-     filter-bulk()
 	; 
-	; takes a bulk, returns a copy with items left-out so only a subset is left.
+	; takes a bulk, performs an sql like select statement on it, supports a results spec and a where clause .
 	;
-	; the mode is only to allow eventual different filtering algorithms.
+	; the mode is only to allow eventual different search algorithms.
 	;-----------------
 	filter-bulk: funcl [
 		blk [block!]
-		mode [word!] ; currently supports ['simple | 'same], expects [column: [integer! word! none!] filter: [any!]]
-		spec [block!]
+		mode [word!]     ; currently supports ['simple | 'same],
+		spec   [block!] ; expects [column [integer! word! none!] filter [any!]]
 		/no-copy-same "when output is the same as input, don't copy the input (may same a lot of ram)"
 		;/local filter column columns out data skip?
 	][
 		vin [{filter-bulk()}]
 		columns: bulk-columns blK
-		;v?? mode
-		;v?? spec
-		;v?? blk
+		v?? mode
+		v?? spec
+		v?? blk
 		
 		
 		switch/default mode [
@@ -1171,7 +1367,7 @@ slim/register [
 			simple [
 				either all [
 					2 = length? spec
-					integer? column: bulk-column-index/default blk first spec 1
+					integer? column: column-idx/default blk first spec 1
 				][
 					filter: second spec
 					either any [
@@ -1223,8 +1419,7 @@ slim/register [
 			; columns bounds.  Otherwise, the first column is used by default.
 			;------
 			same [
-				
-				column: bulk-column-index/default blk 'label-column 1
+				column: column-idx/default blk 'label-column 1
 				
 				out: make block! length? blk
 				out: insert/only out copy first blk
@@ -1237,7 +1432,7 @@ slim/register [
 					either series? data: pick blk column [
 						;v?? data
 						;v?? spec
-						if bulk-find-same :spec data [
+						if find-same :spec data [
 							out: insert out copy/part blk columns
 						]
 					][
@@ -1260,7 +1455,7 @@ slim/register [
 				vprint "Deleting items found in bulk"
 				;---	
 				; get label column to search
-				column: bulk-column-index/default blk 'label-column 1
+				column: column-idx/default blk 'label-column 1
 				out:    blk
 				
 				;--
@@ -1271,7 +1466,7 @@ slim/register [
 					skip?: not either series? data: pick blk column [
 						;v?? data
 						;v?? spec
-						if bulk-find-same :spec data [
+						if find-same :spec data [
 							vprint "found data"
 							remove/part blk columns
 							true
@@ -1295,6 +1490,20 @@ slim/register [
 		vout
 		head out
 	]
+	
+	
+
+
+	;-                                                                                                       .
+	;-----------------------------------------------------------------------------------------------------------
+	;
+	;- UNCLASSIFIED
+	;
+	;-----------------------------------------------------------------------------------------------------------
+	
+	
+	
+
 	
 	
 	
@@ -1327,15 +1536,6 @@ slim/register [
 		]
 	]
 	
-	
-	;-----------------
-	;-     bulk-columns()
-	;-----------------
-	bulk-columns: func [
-		blk [block!]
-	][
-		get-bulk-property blk 'columns
-	]
 	
 	
 	
@@ -1457,16 +1657,18 @@ slim/register [
 	make-bulk: func [
 		columns
 		/records data [block!]
-		/properties props [block!]
+		/properties props [block! none!]
 		/local blk
 	][
+		vin "make-bulk()"
 		blk: compose/deep [[columns: (columns)]]
 		if records [
 			insert-bulk-records blk data none
 		]
-		if properties [
+		if props [
 			set-bulk-properties blk props
 		]
+		vout
 		blk
 	]
 	
