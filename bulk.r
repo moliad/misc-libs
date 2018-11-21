@@ -196,7 +196,7 @@ REBOL [
 	;-  \ documentation
 	bulk-test-data: {
 		good-bulk: [
-			[columns: 3 type: labels: ['first 'second 'third] date:]
+			[columns: 3 type: labels: [first second third] date:]
 			1 2 3
 			4 5 6
 			7 8 9
@@ -476,7 +476,7 @@ slim/register [
 				;(print first .here)
 				[
 					[
-						=row= (print "END ROW")
+						=row=
 						[ =nl= | end ]
 						(
 							
@@ -486,7 +486,6 @@ slim/register [
 							;++ .line-count
 							.old-column-count: .column-count
 							.column-count: length? .row
-							(?? .column-count)
 							
 							all [
 								.old-column-count
@@ -722,7 +721,6 @@ slim/register [
 	][
 		vin  "csv-to-bulk()"
 		csv-data: read-data csv-data
-		v?? csv-data
 		
 		; - Data integrity verification
 		; If the data has more than one row, it should contain at least one crlf
@@ -739,26 +737,20 @@ slim/register [
 		
 		
 		cols: csv-ctx/.column-count
-		v?? cols
 		
 		;---
 		; Add column names to the bulk, take them from the first row
 		unless no-header [
 			head-row: take/part parsed-result cols
 			forall head-row [
-				change  head-row to-lit-word first head-row
+				change  head-row to-word first head-row
 			]
 			labels: compose/only [labels: (head-row)] ; labels is none when /no-header is used
 		]
 
-		v?? parsed-result
-		v?? labels
-		ask "!"
-
 		;---
 		; create the bulk 		
 		bulk: make-bulk/records/properties cols parsed-result labels
-		vprobe type? bulk
 		new-line/skip next bulk true cols
 		
 		vout
@@ -933,7 +925,7 @@ slim/register [
 			foreach [key value] entry [
 				unless labels [
 					; On first entry, generate labels...
-					append lbl-lit-words to-lit-word key
+					append lbl-lit-words to-word key
 					; ...and count columns number
 					column-count: column-count + 1
 				]
@@ -1315,7 +1307,7 @@ slim/register [
 	select*: :select ; we don't actually use select in the bulk lib but just in case.
 	
 	;--------------------------
-	;-         	select()
+	;-     select()
 	;--------------------------
 	; purpose:  takes a bulk, performs an sql like SELECT statement on it.
 	;
@@ -1323,7 +1315,8 @@ slim/register [
 	;
 	; returns:  a bulk which is possibly a subset of the given bulk, it is always a copy
 	;
-	; notes:    
+	; notes:    the where-clause block will be bound to the bulk columns so you can do
+	;			something like [<col-name> = <some value>]
 	;
 	; to do:    
 	;
@@ -1331,14 +1324,64 @@ slim/register [
 	;--------------------------
 	select: funcl [
 		blk [block!]
-		/where  where-clause  [block!] ; expects [column [integer! word! none!] filter [any!]]
+		/where  where-clause  [block!] ; a "doable" rebol block
 		/select select-clause [word! block! integer!]
 	][
+		vin "select (bulk lib)"
+		blk-cp: copy blk ; Copy the bulk because we will remove-each on it
+		old-labels: get-bulk-property blk-cp 'labels
 		
+		;--------------------------
+		;-          Apply where clause
+		;
+		;--------------------------
+		if where [
+			
+			code: compose/deep/only [
+				remove-each (old-labels) next blk-cp [
+					not do (where-clause)
+				]
+			]
+
+			do code
+		]
+		
+		;--------------------------
+		;-          Apply select clause
+		;
+		;--------------------------
+		if select [
+			; "Blockify" single word or integer
+			select-clause: compose [(select-clause)]
+			
+			; Convert column labels to column indexes
+			forall select-clause [
+				if word! = type? first select-clause [
+					change select-clause column-idx blk first select-clause 
+				]
+			]
+			
+			; Only extract selected columns
+			col-nbr:  bulk-columns blk-cp
+			new-col-nbr: length? select-clause
+			; Using extract here, we loose the meta header
+			blk-res-content: extract/index next blk-cp col-nbr select-clause
+			
+			; Build new labels property
+			new-labels: extract/index old-labels col-nbr select-clause
+			labels: compose/only [labels: (new-labels)]
+			
+			; Build filtered bulk
+			bulk-res: make-bulk/records/properties new-col-nbr blk-res-content labels
+			new-line/skip next bulk-res true new-col-nbr
+		]
+		
+		vout
+		
+		first reduce [ bulk-res bulk-res: none ]
 	]
 
 
-	
 	;-----------------
 	;-     filter-bulk()
 	; 
@@ -1358,7 +1401,6 @@ slim/register [
 		v?? mode
 		v?? spec
 		v?? blk
-		
 		
 		switch/default mode [
 			;------
