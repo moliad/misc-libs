@@ -1354,7 +1354,7 @@ slim/register [
 		old-labels: get-bulk-property blk-cp 'labels
 		
 		;--------------------------
-		;-          Apply where clause
+		;-         Apply where clause
 		;
 		;--------------------------
 		if where [
@@ -1369,7 +1369,7 @@ slim/register [
 		]
 		
 		;--------------------------
-		;-          Apply select clause
+		;-         Apply select clause
 		;
 		;--------------------------
 		if select [
@@ -1403,7 +1403,124 @@ slim/register [
 		first reduce [ bulk-res bulk-res: none ]
 	]
 
+	;--------------------------
+	;-     smc-compare()
+	;--------------------------
+	; purpose: <smc> my take on the compare implementation 
+	;
+	; inputs:   
+	;
+	; returns:  
+	;
+	; notes:    
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	smc-compare: funcl [
+		bulk-a [block!]
+		bulk-b [block!]
+		/where  where-clause  [block!] "select what rows to include in output (default: all rows)"
+		/select select-clause [block!] {define how the output is generated. (default: none! when ==, rejoin [ a.col "!=" b.col] when different) }
+		/default def-value	  "what value to use by default when there is no difference (default: none!)"
+	][
+		vin "compare-smc()"
+		
+		;--------------------------
+		;-         Get bulk columns labels
+		;	These labels will be used to loop over each bulk
+		;--------------------------
+		cols-a: column-labels bulk-a
+		cols-b: column-labels bulk-b
+		; Get bulks columns nbr
+		cols-nbr-a: bulk-columns bulk-a
+		cols-nbr-b: bulk-columns bulk-b
+		
+		; Create labels [col1, col2, ...] if inexistent
+		unless cols-a [
+			repeat i cols-nbr-a [append cols-a to-word rejoin ["col" i]]
+		]
+		unless cols-b [
+			repeat i cols-nbr-b [append cols-b to-word rejoin ["col" i]]
+		]
+		; Append bulks labels with a. or b.
+		forall cols-a [change cols-a to-word rejoin ["a." first cols-a]]
+		forall cols-b [change cols-b to-word rejoin ["b." first cols-b]]
+		
+		;--------------------------
+		;-         Manage args and generate defaults
+		;
+		;--------------------------
 
+		; by default, output all rows
+		where-clause:   any [ where-clause #[true] ]
+		
+		; Manage default select-clause
+		; default: none! when ==, rejoin [ a.col "!=" b.col] when different
+		unless select-clause [
+			select-clause: copy []
+			;cols-a: [a.col1 a.col2 a.col3]
+			;cols-b: [b.first-col b.second-col b.col3 b.col4]
+			
+			; Use the bulk that has the smallest number of cols
+			set [cols-min cols-max] either (length? cols-a) > (length? cols-b) [reduce [cols-b cols-a]][reduce [cols-a cols-b]]
+			
+			i: 1
+			foreach col-min cols-min [
+				col-max: pick cols-max i
+				r-col: compose/deep [(to-set-word col-min) either (col-min) <> (col-max) [rejoin [(col-min) " != " (col-max)]][(def-value)]]
+				new-line r-col true
+				append select-clause r-col
+				++ i
+			]
+			
+		]			
+		
+		;--------------------------
+		;-         Compare each row
+		;
+		;--------------------------
+		; Generate the code that will loop over each bulk and generate result rows
+		code: compose/deep [
+			**i: 1
+			foreach [(cols-a)] next bulk-a [
+				set cols-b get-bulk-row bulk-b **i 
+				++ **i
+				
+				if (where-clause)[
+					res-row: reduce [(select-clause)]
+					append result res-row
+				]
+			]
+		]
+		
+		; Execute comparing code
+		result: copy []
+		do code
+		
+		;--------------------------
+		;-         Generate resut bulk
+		;
+		;--------------------------
+		; Get labels for result bulk
+		result-labels: copy []
+		parse/all select-clause [
+			some [
+				  set .head-lbl set-word! (append result-labels to-word .head-lbl)
+				| skip
+			]
+		]
+		bulk-lbl-prop: compose/only [labels: (result-labels)]
+		
+		; Generate the result bulk
+		bulk-res: make-bulk/records/properties length? result-labels result bulk-lbl-prop
+		vout
+		
+		first reduce [bulk-res bulk-res: none] ; Return result while freeing memory
+	]
+	
+	
 	;--------------------------
 	;-     compare()
 	;--------------------------
@@ -1422,8 +1539,8 @@ slim/register [
 	compare: funcl [
 		bulk-a [block!]
 		bulk-b [block!]
-		/where  where-clause  [block! none!] "select what rows to include in output (default: all rows)"
-		/select select-clause [block! none!] {define how the output is generated. (default: none! when ==, rejoin [ a.col "!=" b.col] when different) }
+		/where  where-clause  [block!] "select what rows to include in output (default: all rows)"
+		/select select-clause [block!] {define how the output is generated. (default: none! when ==, rejoin [ a.col "!=" b.col] when different) }
 		/default def-value	  "what value to use by default when there is no difference (default: none!)"
 	][
 		vin "compare()"
@@ -1450,8 +1567,6 @@ slim/register [
 		]
 		
 		unless select-clause [
-			
-			
 			;---
 			; find common columns
 			common-columns: intersect cols-a cols-b
@@ -1485,27 +1600,33 @@ slim/register [
 			; add bulk-b specific columns 
 			v?? select-clause
 		]
-		
-		
-		
+		?? select-clause
  		; to do
  		
  		; extract set words from select-clause
 		; (output-columns)
-		; 
+		output-columns: copy []
+		parse/all select-clause [
+			some [
+				  set .set-word set-word! (append output-columns .set-word)
+				| skip
+			]
+		]
+		?? output-columns
 		; build a set-word version of cols-b to insert within context to keep binding local ...
+		b-setwords: copy column-labels bulk-b
+		forall b-setwords [change b-setwords to-set-word first b-setwords]
+		?? b-setwords
 		
-		
-		where-clause: [ print a.col1]
 		ctx: none
 		
 		compiled-query: [
 			**i: 1
-			output: make-bulk/properties length? output-columns compose/only [labels: (output-columns)]
 			ctx: context [
+				output: make-bulk/properties length? output-columns compose/only [labels: (output-columns)]
 				(b-setwords) ; block of setwords
-				(select-clause-words) ; block of setwords
-				foreach (cols-a) [
+				(output-columns) ;(select-clause-words) ; block of setwords
+				foreach (cols-a) bulk-a [
 					set (cols-b) get-bulk-row bulk-b **i 
 					++ **i
 					
