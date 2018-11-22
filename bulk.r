@@ -1662,9 +1662,10 @@ slim/register [
 	][
 		vin [{filter-bulk()}]
 		columns: bulk-columns blK
-		v?? mode
-		v?? spec
-		v?? blk
+		;v?? mode
+		;v?? spec
+		;v?? blk
+		
 		
 		switch/default mode [
 			;------
