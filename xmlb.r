@@ -1307,6 +1307,58 @@ slim/register [
 	]	; rxml context
 	
 	
+	;-                                                                                                       .
+	;-----------------------------------------------------------------------------------------------------------
+	;
+	;- TOOLS
+	;
+	;-----------------------------------------------------------------------------------------------------------
+	;--------------------------
+	;-     xml-attr-grid()
+	;--------------------------
+	; purpose:  Generates a grid of each attribute name to debug non-matching rows
+	;
+	; inputs:   
+	;
+	; returns:  
+	;
+	; notes:    
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	xml-attr-grid: funcl [
+		rxmlb		[block!]	"The rxml to debug formatted as Root [Table [attr-lists] Table [... ]"
+		cols-nbr	[integer!]	"Number of expected attributes per rows"
+	][
+		vin "xml-attr-grid()"
+		result: []
+		
+		unless find rxmlb 'Root [
+			; I do not use vprint here because the error should always be displayed
+			print ["==========================================================================="]
+			print ["ERROR!: There was an error in loading the XML file. Received:^/ " rxmlb]
+			print ["==========================================================================="]
+			return none
+		]
+		
+		values: extract/index rxmlb/Root 2 2
+		
+		foreach entry values [
+			foreach [key value] entry [
+				append result key
+			]
+		]
+		
+		new-line/all result false
+		new-line/all/skip result true cols-nbr
+		
+		vout
+		
+		result
+	]
+	
 	;- SETUP
 	;-     attr-escape-chars:
 	attr-escape-chars: [

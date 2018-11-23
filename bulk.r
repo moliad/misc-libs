@@ -300,7 +300,8 @@ REBOL [
 
 slim/register [
 
-	xmlb: slim/open/expose 'xmlb none [load-xml mold-xml]
+	xmlb: slim/open/expose 'xmlb none [load-xml mold-xml xml-attr-grid]
+	slim/open/expose 'utils-encoding none [utf-8-to-win-1252 strip-bom]
 	
 	;-                                                                                                       .
 	;-----------------------------------------------------------------------------------------------------------
@@ -637,6 +638,7 @@ slim/register [
 	;--------------------------
 	read-data: funcl [
 		data [string! file! binary!]	"Path of the datafile, or its binary|string content"
+		/utf8			"Set if the file is in UTF-8 and needs to be converted to ANSI"
 	][
 		vin "read-data()"
 		data: switch type?/word data [
@@ -660,6 +662,14 @@ slim/register [
 				data
 			]
 		]
+		print "Data before conversion"
+		print copy/part data 50
+		
+		if utf8 [print "CONVERTING TO ANSI" data: utf-8-to-win-1252 strip-bom data]
+		
+		print "Data after conversion"
+		print copy/part data 50
+		
 		vout
 		data
 	]
@@ -717,10 +727,11 @@ slim/register [
 	csv-to-bulk: funcl [
 		csv-data	 [string! file! binary!]	"Path of the csv file, or its binary|string content"
 		/no-header	    "Will store the first row as bulk labels"
+		/utf8			"Set if the file is in UTF-8 and needs to be converted to ANSI"
 		;/auto-fill  "will fill rows missing data (at end)"
 	][
 		vin  "csv-to-bulk()"
-		csv-data: read-data csv-data
+		csv-data: either utf8 [read-data/utf8 csv-data][read-data csv-data]
 		
 		; - Data integrity verification
 		; If the data has more than one row, it should contain at least one crlf
@@ -901,19 +912,31 @@ slim/register [
 	;
 	; returns:  
 	;
-	; notes:    
+	; notes:    - It is assumed that the keys are in the same order for each row
+	;			- The columns labels are extracted from the first row
+	;			- The columns that have a NULL value must have "#[NULL]" and should be in the XML for
+	;				each row
 	;
-	; to do:    
+	; to do:    - Specify the columns instead of extracting them from the first row
 	;
 	; tests:    
 	;--------------------------
 	xml-to-bulk: funcl [
 		xml-data	[string! file! binary!]	"Path of the xml file, or its binary|string content"
+		
+		/utf8			"Set if the file is in UTF-8 and needs to be converted to ANSI"
 	][
 		vin "xml-to-bulk()"
 		; Use xmlb Library to load xml string
-		loaded-data: load-xml read-data xml-data
+		loaded-data: either utf8 [load-xml read-data/utf8 xml-data][load-xml read-data xml-data]
 		; Extract only key-values block for each entry
+		unless find loaded-data 'Root [
+			; I do not use vprint here because the error should always be displayed
+			print ["==========================================================================="]
+			print ["ERROR!: There was an error in loading the XML file. Received:^/ " loaded-data]
+			print ["==========================================================================="]
+			return none
+		]
 		values: extract/index loaded-data/Root 2 2
 		
 		; Generate labels
@@ -925,6 +948,14 @@ slim/register [
 			foreach [key value] entry [
 				unless labels [
 					; On first entry, generate labels...
+					str-key: to-string key
+					if all [
+						#"." = first str-key
+						1 < length? str-key
+					][
+						key: to-word remove str-key
+					]
+					
 					append lbl-lit-words to-word key
 					; ...and count columns number
 					column-count: column-count + 1
@@ -932,6 +963,22 @@ slim/register [
 				append bulk-valid-values value
 			]
 			labels: compose/only [labels: (lbl-lit-words)]
+		]
+		
+		total: length? bulk-valid-values
+		rows-nbr: total / column-count
+		
+		unless rows-nbr // 1 = 0 [
+			; Number of rows should be whole
+			; Generate debug grid for debugging
+			debug-grid: xml-attr-grid loaded-data column-count
+			write %debug-grid.rdata mold/all debug-grid
+			ask "... ..."
+			; I do not use vprint here because the error should always be displayed
+			print ["==========================================================================="]
+			print ["ERROR!: Got " rows-nbr " rows -> Can not build bulk"]
+			print ["==========================================================================="]
+			return none
 		]
 		
 		res-bulk: make-bulk/records/properties column-count bulk-valid-values labels
@@ -1474,7 +1521,6 @@ slim/register [
 				append select-clause r-col
 				++ i
 			]
-			
 		]			
 		
 		;--------------------------
