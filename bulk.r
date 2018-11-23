@@ -662,13 +662,8 @@ slim/register [
 				data
 			]
 		]
-		print "Data before conversion"
-		print copy/part data 50
 		
-		if utf8 [print "CONVERTING TO ANSI" data: utf-8-to-win-1252 strip-bom data]
-		
-		print "Data after conversion"
-		print copy/part data 50
+		if utf8 [data: utf-8-to-win-1252 strip-bom data]
 		
 		vout
 		data
