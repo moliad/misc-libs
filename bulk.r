@@ -898,12 +898,21 @@ slim/register [
 	;--------------------------
 	; purpose:  
 	;
-	; inputs:   Valid XML formatted as
-	;	{<Root>
-	;		<Table key1="val1" key2="val2" ... />
-	;		<Table key1="val1" key2="val2" ... />
-	;		...
-	;	</Root>}
+	; inputs:
+	;	- xml-data must be valid XML formatted data
+	;	- the content style defines if the content is in attributes or in tags content
+	;		->attribute: 
+	;			{<Root>
+	;				<Table key1="val1" key2="val2" ... />
+	;				<Table key1="val1" key2="val2" ... />
+	;				...
+	;			</Root>}
+	;		->content:
+	;			{<Root>
+	;				<Table><key1>val1</key1><key2>val2</key2>...</Table>
+	;				<Table><key1>val1</key1><key2>val2</key2>...</Table>
+	;				...
+	;			</Root>}
 	;
 	; returns:  
 	;
@@ -917,47 +926,78 @@ slim/register [
 	; tests:    
 	;--------------------------
 	xml-to-bulk: funcl [
-		xml-data	[string! file! binary!]	"Path of the xml file, or its binary|string content"
+		xml-data	[string! file! binary! block!]	"Path of the xml file, or its rxml block or its binary|string content"
 		
+		/wt	wrapping-tag	[word! none!] "Default is Root (See inputs doc)"
+		/et element-tag		[word! none!] "Default is Table (See inputs doc)"
+		/cs content-style	[word! none!] "attribute|content, default is attribute (See inputs doc)"
 		/utf8			"Set if the file is in UTF-8 and needs to be converted to ANSI"
 	][
 		vin "xml-to-bulk()"
-		; Use xmlb Library to load xml string
-		loaded-data: either utf8 [load-xml read-data/utf8 xml-data][load-xml read-data xml-data]
+		
+		; Manage args
+		unless wrapping-tag [wrapping-tag: 'Root]
+		unless element-tag [element-tag: 'Table]
+		unless content-style [content-style: 'attribute]
+		
+		; Use xmlb Library to load xml string if not already a block
+		loaded-data: either block! = type? xml-data [xml-data][
+			loaded-data: either utf8 [load-xml read-data/utf8 xml-data][load-xml read-data xml-data]
+		]
+		
 		; Extract only key-values block for each entry
-		unless find loaded-data 'Root [
+		unless find loaded-data wrapping-tag [
 			; I do not use vprint here because the error should always be displayed
 			print ["==========================================================================="]
 			print ["ERROR!: There was an error in loading the XML file. Received:^/ " loaded-data]
+			print ["Not found ->" wrapping-tag]
 			print ["==========================================================================="]
 			return none
 		]
-		values: extract/index loaded-data/Root 2 2
+		values: extract/index loaded-data/:wrapping-tag 2 2
 		
-		; Generate labels
 		labels: none
 		lbl-lit-words: copy []
 		bulk-valid-values: copy []
 		column-count: 0
+		
 		foreach entry values [
-			foreach [key value] entry [
-				unless labels [
-					; On first entry, generate labels...
-					str-key: to-string key
-					if all [
-						#"." = first str-key
-						1 < length? str-key
-					][
-						key: to-word remove str-key
+			either content-style = 'attribute [
+				foreach [key value] entry [
+					unless labels [
+						; On first entry, generate labels...
+						str-key: to-string key
+						if all [
+							#"." = first str-key
+							1 < length? str-key
+						][
+							key: to-word remove str-key
+						]
+						
+						append lbl-lit-words to-word key
+						; ...and count columns number
+						column-count: column-count + 1
 					]
-					
-					append lbl-lit-words to-word key
-					; ...and count columns number
-					column-count: column-count + 1
+					append bulk-valid-values value
 				]
-				append bulk-valid-values value
+				labels: compose/only [labels: (lbl-lit-words)]
+			][
+;				entry: [
+;				    Name [. "Company 1"]
+;				    Award [. 1234]
+;				    Date [. 24-Nov-2018]
+;				]
+				foreach [key val-block] entry [
+					; value: select val-block '. ; <SMC> Doesn't work??
+					value: second val-block
+					; <TODO> As with the 'attribute option, we need to build the block that will
+					; be used to build the bulk. Warning: we might not have all the properties and
+					; they might not be always in the same order
+					print ["(" key "," value ")"]
+				]
+				ask "..."
+
 			]
-			labels: compose/only [labels: (lbl-lit-words)]
 		]
 		
 		total: length? bulk-valid-values
