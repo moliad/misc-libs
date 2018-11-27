@@ -808,7 +808,7 @@ slim/register [
 		/write-to	output-file [file!]
 		/no-header "Do not output the header row."
 	][
-		result: ""
+		result: copy ""
 		
 		vin "bulk-to-csv()"
 		
@@ -973,10 +973,6 @@ slim/register [
 			return none
 		]
 		values: extract/index loaded-data/:wrapping-tag 2 2
-		
-		labels: none
-		bulk-valid-values: copy []
-		column-count: 0
 		
 		; Example
 		; col-values: [texts [one two none four] numbers [1 2 3 4] floats [none none 3.0 4.0]]
