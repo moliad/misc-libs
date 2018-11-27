@@ -814,7 +814,7 @@ slim/register [
 		
 		; Manage header
 		unless no-header [
-			if labels: get-bulk-property bulk-test 'labels [
+			if labels: get-bulk-property blk 'labels [
 				foreach lbl labels [
 					repend result [to-csv-content to-string lbl ","]
 				]
@@ -864,29 +864,46 @@ slim/register [
 	; tests:    
 	;--------------------------
 	to-csv-content: funcl [
-		content	[string!]
+		content								"Can be any value. none is considered as a NULL value"
+		/default null-val	[string!]		"The string to use when a cell has no value (= none) default is #[NULL]"
 	][
 		;vin "to-csv-content()"
+		; Manage args
+		
+		either none? content [
+			unless null-val [null-val: "#[NULL]"]
+			content: null-val
+		][
+			unless string! = type? content [
+				content: mold/all content
+			]
+		]
+		
 		; this implementation is faster than the tightest parse   ( wrap: parse/all content [ any [=wrap-chars= ]] )
-		if find content #"," [
-			wrap?: true
-		]
+		either content [
+			if find content #"," [
+				wrap?: true
+			]
+			
+			if find content #"^"" [
+				; Escape double-quotes
+				wrap?: true
+				replace/all content {"} {""}
+			]
 		
-		if find content #"^"" [
-			; Escape double-quotes
-			wrap?: true
-			replace/all content {"} {""}
-		]
-	
-		if find content lf [
-			; csv cells should only contain Line feeds,
-			; so we remove the CR
-			replace/all content cr ""
-			wrap?: true
-		]
-		
-		if wrap? [
-			content: rejoin [{"} content {"}]
+			if find content lf [
+				; csv cells should only contain Line feeds,
+				; so we remove the CR
+				replace/all content cr ""
+				wrap?: true
+			]
+			
+			if wrap? [
+				content: rejoin [{"} content {"}]
+			]
+		][
+			
+			content: null-val
 		]
 		;vout
 		
@@ -917,9 +934,10 @@ slim/register [
 	; returns:  
 	;
 	; notes:    - It is assumed that the keys are in the same order for each row
-	;			- The columns labels are extracted from the first row
 	;			- The columns that have a NULL value must have "#[NULL]" and should be in the XML for
 	;				each row
+	;			- Entries can not have more than one value for a given key! It will not be checked and
+	;				will break the conversion
 	;
 	; to do:    - Specify the columns instead of extracting them from the first row
 	;
@@ -957,50 +975,81 @@ slim/register [
 		values: extract/index loaded-data/:wrapping-tag 2 2
 		
 		labels: none
-		lbl-lit-words: copy []
 		bulk-valid-values: copy []
 		column-count: 0
 		
+		; Example
+		; col-values: [texts [one two none four] numbers [1 2 3 4] floats [none none 3.0 4.0]]
+		;	-> inexistent values are set to none
+		; entry-nbr: 4
+		columns-values: copy []
+		entry-nbr: 0
 		foreach entry values [
-			either content-style = 'attribute [
-				foreach [key value] entry [
-					unless labels [
-						; On first entry, generate labels...
-						str-key: to-string key
-						if all [
-							#"." = first str-key
-							1 < length? str-key
-						][
-							key: to-word remove str-key
-						]
-						
-						append lbl-lit-words to-word key
-						; ...and count columns number
-						column-count: column-count + 1
-					]
-					append bulk-valid-values value
+			entry-nbr: entry-nbr + 1
+			foreach [col-name value-container] entry [
+				; Manage columns
+				; Get the accumulated values for the current column name
+				
+				;current-col-values: select columns-values col-name ; <SMC> Doesn't work????
+				workaround: find columns-values col-name
+				current-col-values: if workaround [second workaround]
+				
+				unless current-col-values [
+					; First time we meet this key
+					append columns-values col-name
+					; Generate none value for all preceding entries
+					current-col-values: copy []
+					loop (entry-nbr - 1) [append current-col-values none]
+					append/only columns-values current-col-values
 				]
-				labels: compose/only [labels: (lbl-lit-words)]
-			][
-;				entry: [
-;				    Name [. "Company 1"]
-;				    Award [. 1234]
-;				    Date [. 24-Nov-2018]
-;				]
-				foreach [key val-block] entry [
-					; value: select val-block '. ; <SMC> Doesn't work??
-					value: second val-block
-					; <TODO> As with the 'attribute option, we need to build the block that will
-					; be used to build the bulk. Warning: we might not have all the properties and
-					; they might not be always in the same order
-					print ["(" key "," value ")"]
+				
+				; Unpack the current-column value
+				value: either content-style = 'content [
+					; In content mode, we need to extract the value from the value block
+					second value-container
+				][
+					; Else we take the value as is
+					value-container	
 				]
-				ask "..."
-
+				
+				; Manage NULL values
+				if value = "#[NULL]" [value: none]
+				
+				append current-col-values value
+				
+			]
+			
+			; Append none to columns that current entry doesn't have
+			foreach [key values] columns-values [
+				if entry-nbr > length? values [
+					append values none
+				]
 			]
 		]
 		
-		total: length? bulk-valid-values
+		; Generate data to build bulk + remove dots prefix from keys names
+		labels: copy []
+		data-ptr: copy []
+		foreach [key values] columns-values [
+			if all [
+				#"." = first to-string key
+				1 < length? to-string key	; To ignore the '. case
+			][key: to-word next to-string key]
+			
+			append labels key
+			append/only data-ptr values
+		]
+		
+		bulk-values: copy []
+		repeat entry-i entry-nbr [
+			foreach ptr data-ptr [
+				repend bulk-values [pick ptr entry-i]
+			]
+		]
+		
+		
+		column-count: length? labels
+		total: length? bulk-values
 		rows-nbr: total / column-count
 		
 		unless rows-nbr // 1 = 0 [
@@ -1016,7 +1065,8 @@ slim/register [
 			return none
 		]
 		
-		res-bulk: make-bulk/records/properties column-count bulk-valid-values labels
+		labels: compose/only [labels: (labels)]
+		res-bulk: make-bulk/records/properties column-count bulk-values labels
 		
 		vout
 		res-bulk
@@ -1095,6 +1145,51 @@ slim/register [
 	;- COLUMN MANIPULATION
 	;
 	;-----------------------------------------------------------------------------------------------------------
+
+	;--------------------------
+	;-     add-column()
+	;--------------------------
+	; purpose: Add a column to an already created bulk 
+	;
+	; inputs:   
+	;
+	; returns:  
+	;
+	; notes:    
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	add-column: funcl [
+		blk [block!]
+		col-label	[word!]
+		/val	col-val		"The value for each already present rows for the new column, default is none"
+	][
+		vin "add-column()"
+		; Add column label
+		new-labels: get-bulk-property blk 'labels
+		append new-labels col-label
+		
+		; Increment columns number
+		cols-nbr: bulk-columns blk
+		cols-nbr: cols-nbr + 1
+		set-bulk-property blk 'columns cols-nbr
+		
+		; Fill new column content
+		rows-nbr: bulk-rows blk
+		blk-ptr: next blk	; Skip metadata
+		
+		loop (rows-nbr + 1) [ ; Without the + 1 here, the last value is not appended
+			blk-ptr: skip blk-ptr (cols-nbr - 1)
+			insert blk-ptr col-val
+			blk-ptr: next blk-ptr ; Because we added a value, we need to push the pointer
+		]
+		
+		vout
+		
+		head blk
+	]
 
 	;-----------------
 	;-     column-idx()
@@ -1359,7 +1454,8 @@ slim/register [
 		]
 		; property exists, replace value
 		either hdr: get-bulk-property/block blk prop [
-			insert next hdr value
+			;insert next hdr value ; <SMC> Seems like this line doesn't replace the value ... ?
+			change next hdr value
 		][
 			; new property
 			append first blk reduce [to-set-word prop value]
