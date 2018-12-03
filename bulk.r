@@ -1418,6 +1418,42 @@ slim/register [
 		index: rdata: value: blk: none
 		data
 	]
+	
+	;--------------------------
+	;-     set-column()
+	;--------------------------
+	; purpose:  Set one given column to a given value
+	;
+	; inputs:   
+	;
+	; returns:  
+	;
+	; notes:    
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	set-column: funcl [
+		blk [block!]
+		column [word! integer!]
+		value
+	][
+		vin "set-column()"
+		if word! = type? column [column: column-idx blk column]
+		
+		rows-nbr: bulk-rows blk
+		cols-nbr: bulk-columns blk
+		blk-ptr: next blk	; Skip metadata
+		
+		loop (rows-nbr) [
+			blk-ptr: skip blk-ptr (column - 1)
+			change blk-ptr value
+			blk-ptr: skip blk-ptr (cols-nbr - column + 1)
+		]
+		
+		vout
+	]
 		
 			
 	
