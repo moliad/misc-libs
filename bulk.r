@@ -806,7 +806,8 @@ slim/register [
 	bulk-to-csv: funcl [
 		blk						[block!]
 		/write-to	output-file [file!]
-		/no-header "Do not output the header row."
+		/no-header 							"Do not output the header row."
+		/null		null-value  [string!]	"The value to use on none, default is #[NULL]"
 	][
 		result: copy ""
 		
@@ -816,7 +817,11 @@ slim/register [
 		unless no-header [
 			if labels: get-bulk-property blk 'labels [
 				foreach lbl labels [
-					repend result [to-csv-content to-string lbl ","]
+					either null-value [
+						repend result [to-csv-content/default to-string lbl null-value ","]
+					][
+						repend result [to-csv-content to-string lbl ","]
+					]
 				]
 				remove back tail result ; Remove trailing comma
 				append result crlf
@@ -830,7 +835,11 @@ slim/register [
 		forskip blk-data col-nbr [
 			c-row: copy/part blk-data col-nbr
 			foreach cell c-row [
-				repend result [to-csv-content cell ","]
+				either null-value [
+					repend result [to-csv-content/default cell null-value ","]
+				][
+					repend result [to-csv-content cell ","]
+				]
 			]
 			remove back tail result ; Remove trailing comma
 			append result crlf
@@ -1161,26 +1170,36 @@ slim/register [
 		blk [block!]
 		col-label	[word!]
 		/val	col-val		"The value for each already present rows for the new column, default is none"
+		/prepend			"Will add the column at the beginning instead than at the end"
 	][
 		vin "add-column()"
-		; Add column label
-		new-labels: get-bulk-property blk 'labels
-		append new-labels col-label
-		
-		; Increment columns number
-		cols-nbr: bulk-columns blk
-		cols-nbr: cols-nbr + 1
-		set-bulk-property blk 'columns cols-nbr
 		
 		; Fill new column content
 		rows-nbr: bulk-rows blk
+		cols-nbr: bulk-columns blk
 		blk-ptr: next blk	; Skip metadata
 		
-		loop (rows-nbr + 1) [ ; Without the + 1 here, the last value is not appended
-			blk-ptr: skip blk-ptr (cols-nbr - 1)
-			insert blk-ptr col-val
-			blk-ptr: next blk-ptr ; Because we added a value, we need to push the pointer
+		either prepend [
+			loop (rows-nbr) [
+				insert blk-ptr col-val
+				blk-ptr: skip blk-ptr cols-nbr
+				blk-ptr: next blk-ptr ; Because we added a value, we need to push the pointer
+			]
+		][
+			loop (rows-nbr) [
+				blk-ptr: skip blk-ptr cols-nbr
+				insert blk-ptr col-val
+				blk-ptr: next blk-ptr ; Because we added a value, we need to push the pointer
+			]
 		]
+		
+		; Add column label
+		new-labels: get-bulk-property blk 'labels
+		either prepend [insert new-labels col-label][append new-labels col-label]
+		
+		; Increment columns number
+		cols-nbr: cols-nbr + 1
+		set-bulk-property blk 'columns cols-nbr
 		
 		vout
 		
@@ -2044,9 +2063,11 @@ slim/register [
 	][
 		vin [{bulk-rows()}]
 		cols: get-bulk-property blk 'columns
+		
 		;v?? blk
 		;v?? cols
 		cols: to-integer ((length? next blk) / cols)
+		
 		vout
 		cols
 	]
@@ -2206,14 +2227,26 @@ slim/register [
 		vin "merge-bulks()"
 		; Args checking
 		result: either all [
-			is-bulk? blk1
-			is-bulk? blk2
-			symmetric-bulks? blk1 blk2
+			valid-b1: is-bulk? blk1
+			valid-b2: is-bulk? blk2
+			sym: symmetric-bulks? blk1 blk2
 		][
 			accumulator: copy blk1
 			append accumulator next blk2	
 		][
+			
 			print "ERROR! (merge-bulks): The 2 provided bulks are incompatible or wrongly typed"
+			?? valid-b1
+			?? valid-b2
+			?? sym
+			print "-------------------------------------------"
+			?? blk1
+			?? blk2
+			blk1-lbls: column-labels blk1
+			?? blk1-lbls
+			blk2-lbls: column-labels blk2
+			?? blk2-lbls
+			ask "..."
 			none
 		]
 		
