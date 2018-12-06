@@ -449,7 +449,7 @@ slim/register [
 			[
 			 	 =qvalue=  ;(prin "Q  - ")
 				| =uqvalue= ;(prin "UQ - ")
-				| empty-ptr: [=separator= | crlf] (.txt: copy "") :empty-ptr
+				| empty-ptr: [=separator= | crlf | end] (.txt: copy "") :empty-ptr
 			]
 			;(print .value)
 		]
