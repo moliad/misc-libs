@@ -449,6 +449,7 @@ slim/register [
 			[
 			 	 =qvalue=  ;(prin "Q  - ")
 				| =uqvalue= ;(prin "UQ - ")
+				| empty-ptr: [=separator= | crlf] (.txt: copy "") :empty-ptr
 			]
 			;(print .value)
 		]
@@ -1062,7 +1063,7 @@ slim/register [
 			; Generate debug grid for debugging
 			debug-grid: xml-attr-grid loaded-data column-count
 			write %debug-grid.rdata mold/all debug-grid
-			ask "... ..."
+			ask "... GENERATED DEBUG GRID ..."
 			; I do not use vprint here because the error should always be displayed
 			print ["==========================================================================="]
 			print ["ERROR!: Got " rows-nbr " rows -> Can not build bulk"]
@@ -2099,7 +2100,6 @@ slim/register [
 	][
 		vin [{bulk-rows()}]
 		cols: get-bulk-property blk 'columns
-		
 		;v?? blk
 		;v?? cols
 		cols: to-integer ((length? next blk) / cols)
@@ -2272,17 +2272,10 @@ slim/register [
 		][
 			
 			print "ERROR! (merge-bulks): The 2 provided bulks are incompatible or wrongly typed"
-			?? valid-b1
-			?? valid-b2
-			?? sym
-			print "-------------------------------------------"
-			?? blk1
-			?? blk2
 			blk1-lbls: column-labels blk1
 			?? blk1-lbls
 			blk2-lbls: column-labels blk2
 			?? blk2-lbls
-			ask "..."
 			none
 		]
 		
