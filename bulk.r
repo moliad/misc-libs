@@ -374,7 +374,13 @@ slim/register [
 		;--------------------------
 		.line-count: 0
 		
-		
+		;--------------------------
+		;-         flow rules:
+		;
+		;--------------------------
+		=ok=: none
+		=fail=: [end skip]
+
 		;--------------------------
 		;-         whitespaces:
 		;
@@ -472,23 +478,22 @@ slim/register [
 		;
 		;--------------------------
 		=csv=: [
+			(=not-eof=: =ok=)
 			some [
 				.here:
 				;(print .here)
 				;(print first .here)
 				[
 					[
-						=row=
-						[ =nl= | end ]
+						=not-eof= =row=
+						[ =nl= | end (=not-eof=: =fail=) ]
 						(
-							
 							if tag-row-end [
 								append .row '___ROW-END___
 							]
 							;++ .line-count
 							.old-column-count: .column-count
 							.column-count: length? .row
-							
 							all [
 								.old-column-count
 								.column-count <> .old-column-count
