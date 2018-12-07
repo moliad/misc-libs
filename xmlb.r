@@ -372,6 +372,8 @@ slim/register [
 				replace/all att-data "&gt;" #">"
 				replace/all att-data "&lt;" #"<"
 				replace/all att-data "&amp;" #"&"
+				replace/all att-data "&#xD;" #"^M"
+				replace/all att-data "&#xA;" #"^/"
 				append attrs reduce [to-url att-name copy att-data]
 			)
 		]
