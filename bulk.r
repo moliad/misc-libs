@@ -484,9 +484,14 @@ slim/register [
 				;(print .here)
 				;(print first .here)
 				[
-					[
+					; note that we do not accumulate blank lines in the result dataset.
+					any =spacers= =nl= (
+						;++ .line-count
+						;probe "____BLANK LINE____" 
+					)
+					| [
 						=not-eof= =row=
-						[ =nl= | end (=not-eof=: =fail=) ]
+						[  =nl= end  (=not-eof=: =fail= ) |  =nl= | end (=not-eof=: =fail=) ]
 						(
 							if tag-row-end [
 								append .row '___ROW-END___
@@ -507,11 +512,6 @@ slim/register [
 						)
 					]
 					;---
-					; note that we do not accumulate blank lines in the result dataset.
-					| opt =spacers= =nl= (
-						;++ .line-count
-						;probe "____BLANK LINE____" 
-					)
 				]
 				
 			]
