@@ -431,7 +431,7 @@ slim/register [
 					copy .txt 
 					some [
 						=quoted-chars=  
-						| =lf= (++ .line-count)
+						| =nl= (++ .line-count)
 					]
 					!collect! 
 				]
