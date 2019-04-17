@@ -637,6 +637,7 @@ slim/register [
 		uncompressed-data nb-entries path file info errors
 		flist
 	][
+		vin "zipper/unzip()"
 		errors: 0
 		info: :vprint
 		if any-file? where [where: dirize where]
@@ -784,6 +785,7 @@ slim/register [
 			"Files/Dirs unarchived: " nb-entries "^/"
 			"Decompression errors: " errors "^/"
 		]
+		vout
 		either list [
 			flist
 		][
