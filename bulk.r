@@ -83,7 +83,7 @@ REBOL [
 		at its most basic, a BULK is defined like so:
 		
 		bulk: [
-			[columns: [integer!]]  
+			[columns: #[integer!]]  
 			...
 		]
 		
@@ -300,6 +300,12 @@ REBOL [
 
 slim/register [
 
+	;-                                                                                                       .
+	;-----------------------------------------------------------------------------------------------------------
+	;
+	;-     LIBS
+	;
+	;-----------------------------------------------------------------------------------------------------------
 	xmlb: slim/open/expose 'xmlb none [load-xml mold-xml xml-attr-grid]
 	slim/open/expose 'utils-encoding none [utf-8-to-win-1252 strip-bom]
 	
@@ -581,7 +587,29 @@ slim/register [
 	;- INSPECTION AND CORE CREATION
 	;
 	;-----------------------------------------------------------------------------------------------------------
-	
+
+	;-----------------
+	;-     make-bulk()
+	;
+	; create a new bulk 
+	;-----------------
+	make-bulk: funcl [
+		columns [integer!]
+		/records data [block!]
+		/properties props [block! none!]
+	][
+		vin "make-bulk()"
+		blk: compose/deep [[columns: (columns)]]
+		if records [
+			insert-bulk-records blk data none
+		]
+		if props [
+			set-bulk-properties blk props
+		]
+		vout
+		blk
+	]
+		
 	;-----------------
 	;-     is-bulk?
 	;
@@ -784,6 +812,10 @@ slim/register [
 	;
 	; notes:
 	;	- If the given bulk has a labels property, it is added as the first row
+	;   - when /flush is used, copy your original bulk if you need to reuse it after,
+	;     cause its header will be modified and you can't go back.
+	;
+	;	- with /flush, we ALWAYS append to given file, so be sure to clear it before first call to 'BULK-TO-CSV
 	;
 	;	=CONCERNING THE CSV OUTPUT=
 	;	(In following, by 'wrapped, we mean that the content is surrounded by double-quotes ("))
@@ -811,13 +843,25 @@ slim/register [
 	;--------------------------
 	bulk-to-csv: funcl [
 		blk						[block!]
-		/write-to	output-file [file!]
-		/no-header 							"Do not output the header row."
-		/null		null-value  [string!]	"The value to use on none, default is #[NULL]"
+		/write-to	output-file [file!] "deprecated, replaced by /in "
+		/in    		in-data		[file! string!] "Dump the csv data in given destination (when given file!, we set output-file)"
+		/null		null-value  [string!]	"The value to use on none! values present in bulk, default is #[NULL]"
+		/no-header 	"Do not output the header row."
+		/flush		"Flush the bulk content from memory.  Also header column names, if they where present.^/This is used to dump a csv in a serialization loop,^/we don't want to dump the headers at each part of the dump. when file is given, /flush will assume write/append, so clear it first."
 	][
-		result: copy ""
-		
 		vin "bulk-to-csv()"
+		
+		result: any [
+			all [string? in-data  in-data]
+			copy ""
+		]
+		if file? in-data [
+			output-file: in-data
+		]
+		if all [flush   none? output-file] [
+			to-error "Cannot use /flush without also specifying output-file (or in-data as a file!)"
+		]
+		
 		
 		; Manage header
 		unless no-header [
@@ -829,7 +873,7 @@ slim/register [
 						repend result [to-csv-content to-string lbl ","]
 					]
 				]
-				remove back tail result ; Remove trailing comma
+				take/last ; Remove trailing comma
 				append result crlf
 			]
 		]
@@ -847,15 +891,24 @@ slim/register [
 					repend result [to-csv-content cell ","]
 				]
 			]
-			remove back tail result ; Remove trailing comma
+			take/last result ; Remove trailing comma
 			append result crlf
 		]
 		
-		remove back tail result
-		remove back tail result ; Remove trailing crlf
+		take/last result
+		take/last result ; Remove trailing crlf
 		
-		if write-to [
-			write/binary output-file to-binary result
+		if output-file [
+			either flush [
+				write/binary/append output-file to-binary result
+			][
+				write/binary output-file to-binary result
+			]
+		]
+		
+		if flush [
+			clear-bulk blk
+			remove-bulk-property blk 'labels ; we remove these so they don't get dumped a second time.
 		]
 		vout
 		
@@ -1147,6 +1200,67 @@ slim/register [
 	;
 	;-----------------------------------------------------------------------------------------------------------
 	
+	;-----------------
+	;-     insert-bulk-records()
+	;
+	; adds one or more records at given index within a bulk.
+	;
+	; notes:    makes sure the given data is a full record for given bulk.
+	;-----------------
+	insert-bulk-records: func [
+		blk [block!]
+		records [block!]
+		row [integer! none!]
+		/local cols
+	][
+		cols: get-bulk-property blk 'columns
+		either 0 = mod (length? records) cols [
+			either row [
+				insert at blk (cols - 1 * row + 1) records
+			][
+				insert tail blk records
+			]
+	
+			; makes probing much easier to analyse
+			new-line at head blk 2 true
+			new-line/skip next head blk true cols
+		][
+			to-error "insert-bulk-row(): record length(s) doesn't match bulk record size."
+		]
+	]
+	
+	
+	;-----------------
+	;-     append-bulk-records()
+	;
+	; adds one or more records at end of a bulk
+	;
+	; notes:    makes sure the given data is a full record for given bulk.
+	;-----------------
+	append-bulk-records: funcl [
+		blk [block!]
+		records [block!]
+	][
+		insert-bulk-records blk records none
+	]
+	
+	
+	;-----------------
+	;-     clear-bulk()
+	;
+	; removes all the records from a bulk, but doesn't change header.
+	;-----------------
+	clear-bulk: funcl [
+		blk [block!]
+	][
+		;vin [{clear-bulk()}]
+		either is-bulk? blk [
+			clear at blk 2
+		][
+			to-error "clear-bulk(): supplied data isn't a valid Bulk block!"
+		]
+		;vout
+	]
 
 	
 	
@@ -1493,19 +1607,48 @@ slim/register [
 		]
 	]
 	
-	
+	;--------------------------
+	;-     remove-bulk-property()
+	;--------------------------
+	; purpose:  completely removes a property from the bulk header
+	;
+	; inputs:   bulk and a property name
+	;
+	; returns:  
+	;
+	; notes:    you CANNOT remove the columns: property. (error is raised)
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	remove-bulk-property: funcl [
+		bulk [block!]
+		prop [word! set-word! lit-word!]
+	][
+		vin "remove-bulk-property()"
+		prop: to-word prop
+		if prop = 'columns [
+			to-error "remove-bulk-property()  :  cannot remove COLUMNS property ... it is required by bulk."
+		]
+		
+		if hdr: get-bulk-property/block blk prop [
+			remove/part hdr 2
+		]
+		vout
+		bulk
+	]
 
 	
 	;-----------------
 	;-     set-bulk-property()
 	;-----------------
-	set-bulk-property: func [
+	set-bulk-property: funcl [
 		blk [block!]
 		prop [word! set-word! lit-word!]
 		value
-		/local hdr
 	][
-		prop: to-set-word prop
+		;prop: to-set-word prop
 		if set-word? value [
 			to-error "set-bulk-property(): cannot set property as set-word type"
 		]
@@ -1524,10 +1667,9 @@ slim/register [
 	;-----------------
 	;-     set-bulk-properties()
 	;-----------------
-	set-bulk-properties: func [
+	set-bulk-properties: funcl [
 		blk [block!]
 		props [block!]
-		/local property value
 	][
 		until [
 			property: pick props 1
@@ -2168,83 +2310,6 @@ slim/register [
 	
 	
 	
-	
-	;-----------------
-	;-     insert-bulk-records()
-	;-----------------
-	insert-bulk-records: func [
-		blk [block!]
-		records [block!]
-		row [integer! none!]
-		/local cols
-	][
-		cols: get-bulk-property blk 'columns
-		either 0 = mod (length? records) cols [
-			either row [
-				insert at blk (cols - 1 * row + 1) records
-			][
-				insert tail blk records
-			]
-	
-			; makes probing much easier to analyse
-			new-line at head blk 2 true
-			new-line/skip next head blk true cols
-		][
-			to-error "insert-bulk-row(): record length(s) doesn't match bulk record size."
-		]
-	]
-	
-	
-	;-----------------
-	;-     add-bulk-records()
-	;-----------------
-	add-bulk-records: func [
-		blk [block!]
-		records [block!]
-	][
-		insert-bulk-records blk records none
-	]
-	
-	
-	
-	
-	;-----------------
-	;-     make-bulk()
-	;-----------------
-	make-bulk: func [
-		columns
-		/records data [block!]
-		/properties props [block! none!]
-		/local blk
-	][
-		vin "make-bulk()"
-		blk: compose/deep [[columns: (columns)]]
-		if records [
-			insert-bulk-records blk data none
-		]
-		if props [
-			set-bulk-properties blk props
-		]
-		vout
-		blk
-	]
-	
-	;-----------------
-	;-     clear-bulk()
-	;
-	; removes all the records from a bulk, but doesn't change header.
-	;-----------------
-	clear-bulk: func [
-		blk [block!]
-	][
-		;vin [{clear-bulk()}]
-		either is-bulk? blk [
-			clear at blk 2
-		][
-			to-error "clear-bulk(): supplied data isn't a valid Bulk block!"
-		]
-		;vout
-	]
 	
 	;--------------------------
 	;-     merge-bulks()
