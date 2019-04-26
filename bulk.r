@@ -594,20 +594,26 @@ slim/register [
 	; create a new bulk 
 	;-----------------
 	make-bulk: funcl [
-		columns [integer!]
+		columns [integer! block!] "when a block! is given, it's the names of the columns, columns count header is then set automatically."
 		/records data [block!]
 		/properties props [block! none!]
 	][
 		vin "make-bulk()"
-		blk: compose/deep [[columns: (columns)]]
+		either block? columns [
+			bulk: compose/deep [[columns: (length? columns)]]
+			column-labels/set bulk columns
+		][
+			; integer! given
+			bulk: compose/deep [[columns: (columns)]]
+		]
 		if records [
-			insert-bulk-records blk data none
+			insert-bulk-records bulk data none
 		]
 		if props [
-			set-bulk-properties blk props
+			set-bulk-properties bulk props
 		]
 		vout
-		blk
+		bulk
 	]
 		
 	;-----------------
@@ -731,7 +737,7 @@ slim/register [
 			to-error rejoin ["bulk/parse-csv : CSV format error here: " copy/part csv-ctx/.here 50 ]
 		]
 		
-		v?? csv-ctx/.table
+		;v?? csv-ctx/.table
 		
 		vout
 		
@@ -873,7 +879,7 @@ slim/register [
 						repend result [to-csv-content to-string lbl ","]
 					]
 				]
-				take/last ; Remove trailing comma
+				take/last result ; Remove trailing comma
 				append result crlf
 			]
 		]
@@ -912,7 +918,7 @@ slim/register [
 		]
 		vout
 		
-		result
+		first reduce [result result: none]
 	]
 	
 	;--------------------------
@@ -1458,9 +1464,14 @@ slim/register [
 	;--------------------------
 	column-labels: funcl [
 		bulk [block!]
+		/set names [block!]
 	][
 		;vin "column-labels()"
-		get-bulk-property  bulk 'labels
+		either set [
+			set-bulk-property  bulk 'labels names
+		][
+			get-bulk-property  bulk 'labels
+		]
 		;vout
 	]
 
@@ -1607,38 +1618,6 @@ slim/register [
 		]
 	]
 	
-	;--------------------------
-	;-     remove-bulk-property()
-	;--------------------------
-	; purpose:  completely removes a property from the bulk header
-	;
-	; inputs:   bulk and a property name
-	;
-	; returns:  
-	;
-	; notes:    you CANNOT remove the columns: property. (error is raised)
-	;
-	; to do:    
-	;
-	; tests:    
-	;--------------------------
-	remove-bulk-property: funcl [
-		bulk [block!]
-		prop [word! set-word! lit-word!]
-	][
-		vin "remove-bulk-property()"
-		prop: to-word prop
-		if prop = 'columns [
-			to-error "remove-bulk-property()  :  cannot remove COLUMNS property ... it is required by bulk."
-		]
-		
-		if hdr: get-bulk-property/block blk prop [
-			remove/part hdr 2
-		]
-		vout
-		bulk
-	]
-
 	
 	;-----------------
 	;-     set-bulk-property()
@@ -1649,18 +1628,18 @@ slim/register [
 		value
 	][
 		;prop: to-set-word prop
-		if set-word? value [
+		if set-word? :value [
 			to-error "set-bulk-property(): cannot set property as set-word type"
 		]
 		; property exists, replace value
 		either hdr: get-bulk-property/block blk prop [
 			;insert next hdr value ; <SMC> Seems like this line doesn't replace the value ... ?
-			change next hdr value
+			change next hdr :value
 		][
 			; new property
-			append first blk reduce [to-set-word prop value]
+			append first blk reduce [to-set-word prop :value]
 		]
-		value
+		:value
 	]
 	
 	
@@ -1686,6 +1665,38 @@ slim/register [
 		]
 	]
 	
+	;--------------------------
+	;-     remove-bulk-property()
+	;--------------------------
+	; purpose:  completely removes a property from the bulk header
+	;
+	; inputs:   bulk and a property name
+	;
+	; returns:  
+	;
+	; notes:    you CANNOT remove the columns: property. (error is raised)
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	remove-bulk-property: funcl [
+		bulk [block!]
+		prop [word! set-word! lit-word!]
+	][
+		vin "remove-bulk-property()"
+		prop: to-word prop
+		if prop = 'columns [
+			to-error "remove-bulk-property()  :  cannot remove COLUMNS property ... it is required by bulk."
+		]
+		
+		if hdr: get-bulk-property/block bulk prop [
+			remove/part hdr 2
+		]
+		vout
+		bulk
+	]
+
 		
 	
 	;-                                                                                                       .
