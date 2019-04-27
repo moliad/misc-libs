@@ -1256,7 +1256,7 @@ slim/register [
 			]
 			
 			; vprint ["Append row to blk: " mold/all new-blk-row]
-			append-bulk-records blk new-blk-row
+			insert-bulk-records blk new-blk-row row
 		]
 		; vprint "=== State of bulk at the end of the insert process ==="
 		; v?? blk
