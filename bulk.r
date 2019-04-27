@@ -1205,6 +1205,64 @@ slim/register [
 	;- ROW MANIPULATION
 	;
 	;-----------------------------------------------------------------------------------------------------------
+	;--------------------------
+	;-     insert-objects()
+	;--------------------------
+	; purpose:  
+	;
+	; inputs:   
+	;
+	; returns:  
+	;
+	; notes:    
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	insert-objects: funcl [
+		blk		[block!]
+		records	[block!]
+		row		[integer! none!]
+	][
+		; vin "insert-object()"
+		; vprint "=== Insert records in bulk: ==="
+		blk-cols: column-labels blk
+		; v?? blk-cols
+		
+		foreach record-obj records [
+			; vprint "===== NEW OBJECT TO INSERT ======"
+			; v?? record-obj
+			obj-cols: words-of record-obj
+			; v?? obj-cols
+			foreach col obj-cols [
+				; Add column if not present in bulk
+				unless find blk-cols col [
+					; vprint ["--> Add col " col " to bulk"]
+					add-column blk col
+				]
+				
+			]
+			; vprint "== BULK AFTER COLS INSERTION =="
+			; v?? blk
+			
+			; vprint "--> Insert data"
+			new-blk-cols: column-labels blk
+			new-blk-row: copy []
+			foreach col new-blk-cols [
+				val: get in record-obj col
+				; vprint ["Value found for col " col ": " mold/all val]
+				append new-blk-row val
+			]
+			
+			; vprint ["Append row to blk: " mold/all new-blk-row]
+			append-bulk-records blk new-blk-row
+		]
+		; vprint "=== State of bulk at the end of the insert process ==="
+		; v?? blk
+		; ask "... post insert-objects ..."
+		; vout
+	]
 	
 	;-----------------
 	;-     insert-bulk-records()
@@ -1294,7 +1352,7 @@ slim/register [
 	;--------------------------
 	add-column: funcl [
 		blk [block!]
-		col-label	[word!]
+		col-label	[word! string!]
 		/val	col-val		"The value for each already present rows for the new column, default is none"
 		/prepend			"Will add the column at the beginning instead than at the end"
 	][
