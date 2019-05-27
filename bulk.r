@@ -307,7 +307,7 @@ slim/register [
 	;
 	;-----------------------------------------------------------------------------------------------------------
 	xmlb: slim/open/expose 'xmlb none [load-xml mold-xml xml-attr-grid]
-	slim/open/expose 'utils-encoding none [utf-8-to-win-1252 strip-bom]
+	slim/open/expose 'utils-encoding none [utf8-win1252 strip-bom]
 	
 	;-                                                                                                       .
 	;-----------------------------------------------------------------------------------------------------------
@@ -450,7 +450,7 @@ slim/register [
 		;
 		;--------------------------
 		=uqvalue=: [
-			copy .txt some =unquoted-chars= !collect!
+			copy .txt any =unquoted-chars= !collect!
 		]
 
 		;--------------------------
@@ -510,7 +510,7 @@ slim/register [
 								.column-count <> .old-column-count
 								to-error rejoin ["column count mismatch! (line ".line-count ") was : " .old-column-count  " found : " .column-count ]
 							]
-							;?? .column-count
+							;v?? .column-count
 							;.column-count: 
 							append .table .row 
 							clear .row  
@@ -594,7 +594,7 @@ slim/register [
 	; create a new bulk 
 	;-----------------
 	make-bulk: funcl [
-		columns [integer! block!] "when a block! is given, it's the names of the columns, columns count header is then set automatically."
+		columns [integer! block!] "when a block! is given, it's the names of the columns, columns count header is then set automatically.^/Names can be given in string! or word! type."
 		/records data [block!]
 		/properties props [block! none!]
 	][
@@ -703,8 +703,8 @@ slim/register [
 			]
 		]
 		
-		if utf8 [data: utf-8-to-win-1252 strip-bom data]
-		
+		if utf8 [ data: utf8-win1252/transcode strip-bom data ]
+		;probe stats
 		vout
 		data
 	]
@@ -764,6 +764,7 @@ slim/register [
 		/no-header	    "Will store the first row as bulk labels"
 		/utf8			"Set if the file is in UTF-8 and needs to be converted to ANSI"
 		;/auto-fill  "will fill rows missing data (at end)"
+		/quiet 			"do not show warnings"
 	][
 		vin  "csv-to-bulk()"
 		csv-data: either utf8 [read-data/utf8 csv-data][read-data csv-data]
@@ -771,12 +772,14 @@ slim/register [
 		; - Data integrity verification
 		; If the data has more than one row, it should contain at least one crlf
 		; The absence of clrf might indicate a wrong file reading => WARNING
-		unless find csv-data crlf [
-			vprint "==============================================================="
-			vprint "WARNING! (csv-to-bulk): No crlf found in data"
-			vprint {Please use [to-string read/binary <file-path>] to read the file}
-			vprint "If the data contains only one row, you can ignore this warning"
-			vprint "==============================================================="
+		unless quiet [
+			unless find csv-data crlf [
+				vprint "==============================================================="
+				vprint "WARNING! (csv-to-bulk): No crlf found in data"
+				vprint {Please use [to-string read/binary <file-path>] to read the file}
+				vprint "If the data contains only one row, you can ignore this warning"
+				vprint "==============================================================="
+			]
 		]
 		
 		parsed-result: parse-csv csv-data
@@ -1225,7 +1228,8 @@ slim/register [
 		records	[block!]
 		row		[integer! none!]
 	][
-		; vin "insert-object()"
+		;vin "insert-object()"
+		
 		; vprint "=== Insert records in bulk: ==="
 		blk-cols: column-labels blk
 		; v?? blk-cols
@@ -1250,7 +1254,8 @@ slim/register [
 			new-blk-cols: column-labels blk
 			new-blk-row: copy []
 			foreach col new-blk-cols [
-				val: get in record-obj col
+				; if the given object doesn't have the data, we insert null
+				val: attempt [get in record-obj col]
 				; vprint ["Value found for col " col ": " mold/all val]
 				append new-blk-row val
 			]
@@ -1261,7 +1266,7 @@ slim/register [
 		; vprint "=== State of bulk at the end of the insert process ==="
 		; v?? blk
 		; ask "... post insert-objects ..."
-		; vout
+		;vout
 	]
 	
 	;-----------------
@@ -1473,26 +1478,25 @@ slim/register [
 	; if columns are labeled, return the column index matching specified bulk
 	; returns none if no labels or name not in list.
 	;-----------------
-;	get-bulk-labels-index:  ; deprecated name
-;	;---
-;	column-idx: func [
-;		blk [block!]
-;		label [word!]
-;		/local labels
-;	][
-;		vin "column-idx()"
-;		v?? label
-;		idx: result: if block? labels: get-bulk-property blk 'labels [
-;			if labels: find labels label [
-;				index? labels
-;			]
-;		]
-;		
-;		v?? idx
-;		vout
-;		
-;		idx
-;	]
+	get-bulk-labels-index:  ; deprecated name
+	;---
+	column-idx: funcl [
+		blk [block!]
+		label [word!]
+	][
+		vin "column-idx()"
+		v?? label
+		idx: result: if block? labels: get-bulk-property blk 'labels [
+			if labels: find labels label [
+				index? labels
+			]
+		]
+		
+		v?? idx
+		vout
+		
+		idx
+	]
 
 
 	;-----------------
@@ -1526,6 +1530,17 @@ slim/register [
 	][
 		;vin "column-labels()"
 		either set [
+			forall names [
+				name: first names
+				switch/default type?/word name [
+					word! [] ; all good nothing to do.
+					string! [
+						change names to-word name
+					]
+				][
+					to-error "bulk/column-labels/set() : column labels can only be set from string! or word! values"
+				]
+			]	
 			set-bulk-property  bulk 'labels names
 		][
 			get-bulk-property  bulk 'labels
@@ -2344,7 +2359,7 @@ slim/register [
 	;-----------------
 	;-     sort-bulk()
 	;-----------------
-	sort-bulk: func [
+	sort-bulk: funcl [
 		blk [block!]
 		/using sort-column [integer! word! none!] "what column to sort on, none defaults to 'sort-column property or first column if undefined."
 	][
@@ -2357,12 +2372,12 @@ slim/register [
 				; get the sort column from a property in the bulk.
 				all [
 					word? sort-column
-					integer? sort-column: get-bulk-property sort-column
-					sort-column
+					integer? i: column-idx sort-column
+					i
 				]
 			]
 			
-			; get the sort column from a property in the bulk.
+			; get the default sort column from a property in the bulk.
 			all [
 				integer? sort-column: get-bulk-property 'sort-column
 				sort-column
@@ -2371,7 +2386,7 @@ slim/register [
 			; default 
 			1
 		]
-		sort/skip/compare blk (bulk-columns blk) sort-column
+		sort/skip/compare next blk (bulk-columns blk) sort-column
 		blk
 	]
 	
