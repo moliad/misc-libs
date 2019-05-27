@@ -300,6 +300,12 @@ REBOL [
 
 slim/register [
 
+	;--------------------------
+	;-     	default-none:
+	;
+	;--------------------------
+	default-none: "#[NULL]"
+
 	;-                                                                                                       .
 	;-----------------------------------------------------------------------------------------------------------
 	;
@@ -763,6 +769,7 @@ slim/register [
 		csv-data	 [string! file! binary!]	"Path of the csv file, or its binary|string content"
 		/no-header	    "Will store the first row as bulk labels"
 		/utf8			"Set if the file is in UTF-8 and needs to be converted to ANSI"
+		/null		null-value  [string!]	"The value to convert to none in the bulk, default is #[NULL]"
 		;/auto-fill  "will fill rows missing data (at end)"
 		/quiet 			"do not show warnings"
 	][
@@ -798,7 +805,15 @@ slim/register [
 		]
 
 		;---
+		; Manage none values in loaded CSV
+		?? null
+		?? null-value
+		unless null-value [null-value: default-none]
+		?? null-value
+		replace/all parsed-result null-value none
+		;---
 		; create the bulk 		
+
 		bulk: make-bulk/records/properties cols parsed-result labels
 		new-line/skip next bulk true cols
 		
@@ -948,7 +963,7 @@ slim/register [
 		; Manage args
 		
 		either none? content [
-			unless null-val [null-val: "#[NULL]"]
+			unless null-val [null-val: default-none]
 			content: null-val
 		][
 			unless string! = type? content [
@@ -1086,7 +1101,7 @@ slim/register [
 				]
 				
 				; Manage NULL values
-				if value = "#[NULL]" [value: none]
+				if value = default-none [value: none]
 				
 				append current-col-values value
 				
