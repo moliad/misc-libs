@@ -300,27 +300,29 @@ REBOL [
 
 slim/register [
 
-	;--------------------------
-	;-     	default-none:
-	;
-	;--------------------------
-	default-none: "#[NULL]"
-
 	;-                                                                                                       .
 	;-----------------------------------------------------------------------------------------------------------
 	;
-	;-     LIBS
+	;- LIBS
 	;
 	;-----------------------------------------------------------------------------------------------------------
 	xmlb: slim/open/expose 'xmlb none [load-xml mold-xml xml-attr-grid]
 	slim/open/expose 'utils-encoding none [utf8-win1252 strip-bom]
 	
+	
 	;-                                                                                                       .
 	;-----------------------------------------------------------------------------------------------------------
 	;
-	;- PARSING RULES
+	;- GLOBALS
 	;
 	;-----------------------------------------------------------------------------------------------------------
+	
+	;--------------------------
+	;-     	default-null:
+	;
+	;--------------------------
+	default-null: "#[NULL]"
+
 	
 	
 	
@@ -766,12 +768,12 @@ slim/register [
 	; tests:    
 	;--------------------------
 	csv-to-bulk: funcl [
-		csv-data	 [string! file! binary!]	"Path of the csv file, or its binary|string content"
-		/no-header	    "Will store the first row as bulk labels"
-		/utf8			"Set if the file is in UTF-8 and needs to be converted to ANSI"
+		csv-data	[string! file! binary!]	"Path of the csv file, or its binary|string content"
+		/no-header	"Will store the first row as bulk labels"
+		/utf8		"Set if the file is in UTF-8 and needs to be converted to ANSI"
 		/null		null-value  [string!]	"The value to convert to none in the bulk, default is #[NULL]"
-		;/auto-fill  "will fill rows missing data (at end)"
-		/quiet 			"do not show warnings"
+		;/auto-fill "will fill rows missing data (at end)"
+		/quiet 		"do not show warnings"
 	][
 		vin  "csv-to-bulk()"
 		csv-data: either utf8 [read-data/utf8 csv-data][read-data csv-data]
@@ -806,10 +808,11 @@ slim/register [
 
 		;---
 		; Manage none values in loaded CSV
-		?? null
-		?? null-value
-		unless null-value [null-value: default-none]
-		?? null-value
+		;?? null
+		;?? null-value
+		null-value: any [null-value default-null]
+
+		;?? null-value
 		replace/all parsed-result null-value none
 		;---
 		; create the bulk 		
@@ -873,7 +876,13 @@ slim/register [
 		/no-header 	"Do not output the header row."
 		/flush		"Flush the bulk content from memory.  Also header column names, if they where present.^/This is used to dump a csv in a serialization loop,^/we don't want to dump the headers at each part of the dump. when file is given, /flush will assume write/append, so clear it first."
 	][
-		vin "bulk-to-csv()"
+		;vin "bulk-to-csv()"
+		
+		
+		null-value: any [
+			null-value
+			default-null
+		]
 		
 		result: any [
 			all [string? in-data  in-data]
@@ -908,10 +917,12 @@ slim/register [
 		blk-data: next blk ;skip metadata
 		forskip blk-data col-nbr [
 			c-row: copy/part blk-data col-nbr
-			foreach cell c-row [
-				either null-value [
+			either null-value [
+				foreach cell c-row [
 					repend result [to-csv-content/default cell null-value ","]
-				][
+				]
+			][
+				forach cell c-row [
 					repend result [to-csv-content cell ","]
 				]
 			]
@@ -919,8 +930,10 @@ slim/register [
 			append result crlf
 		]
 		
-		take/last result
-		take/last result ; Remove trailing crlf
+		
+		; Remove trailing crlf
+		;take/last result
+		;take/last result 
 		
 		if output-file [
 			either flush [
@@ -934,7 +947,7 @@ slim/register [
 			clear-bulk blk
 			remove-bulk-property blk 'labels ; we remove these so they don't get dumped a second time.
 		]
-		vout
+		;vout
 		
 		first reduce [result result: none]
 	]
@@ -961,41 +974,35 @@ slim/register [
 	][
 		;vin "to-csv-content()"
 		; Manage args
-		
-		either none? content [
-			unless null-val [null-val: default-none]
-			content: null-val
-		][
-			unless string! = type? content [
+		case [
+			none? content [
+				content: any [null-val default-null]
+			]
+			not string? content [
 				content: mold/all content
 			]
 		]
 		
 		; this implementation is faster than the tightest parse   ( wrap: parse/all content [ any [=wrap-chars= ]] )
-		either content [
-			if find content #"," [
-				wrap?: true
-			]
-			
-			if find content #"^"" [
-				; Escape double-quotes
-				wrap?: true
-				replace/all content {"} {""}
-			]
+		if find content #"," [
+			wrap?: true
+		]
 		
-			if find content lf [
-				; csv cells should only contain Line feeds,
-				; so we remove the CR
-				replace/all content cr ""
-				wrap?: true
-			]
-			
-			if wrap? [
-				content: rejoin [{"} content {"}]
-			]
-		][
-			
-			content: null-val
+		if find content #"^"" [
+			; Escape double-quotes
+			wrap?: true
+			replace/all content {"} {""}
+		]
+	
+		if find content lf [
+			; csv cells should only contain Line feeds,
+			; so we remove the CR
+			replace/all content cr ""
+			wrap?: true
+		]
+		
+		if wrap? [
+			content: rejoin [{"} content {"}]
 		]
 		;vout
 		
@@ -1101,7 +1108,7 @@ slim/register [
 				]
 				
 				; Manage NULL values
-				if value = default-none [value: none]
+				if value = default-null [value: none]
 				
 				append current-col-values value
 				
@@ -1410,6 +1417,34 @@ slim/register [
 		head blk
 	]
 
+
+
+	;-----------------
+	;-     column-idx()
+	;
+	; if columns are labeled, return the column index matching specified bulk
+	; returns none if no labels or name not in list.
+	;-----------------
+	get-bulk-labels-index:  ; deprecated name
+	;---
+	column-idx: funcl [
+		blk [block!]
+		label [word!]
+	][
+		vin "column-idx()"
+		v?? label
+		idx: result: if block? labels: get-bulk-property blk 'labels [
+			if labels: find labels label [
+				index? labels
+			]
+		]
+		
+		v?? idx
+		vout
+		
+		idx
+	]
+
 	;-----------------
 	;-     column-idx()
 	;-----------------
@@ -1487,31 +1522,6 @@ slim/register [
 	]
 	
 	
-	;-----------------
-	;-     column-idx()
-	;
-	; if columns are labeled, return the column index matching specified bulk
-	; returns none if no labels or name not in list.
-	;-----------------
-	get-bulk-labels-index:  ; deprecated name
-	;---
-	column-idx: funcl [
-		blk [block!]
-		label [word!]
-	][
-		vin "column-idx()"
-		v?? label
-		idx: result: if block? labels: get-bulk-property blk 'labels [
-			if labels: find labels label [
-				index? labels
-			]
-		]
-		
-		v?? idx
-		vout
-		
-		idx
-	]
 
 
 	;-----------------
@@ -1772,7 +1782,7 @@ slim/register [
 		bulk [block!]
 		prop [word! set-word! lit-word!]
 	][
-		vin "remove-bulk-property()"
+		;vin "remove-bulk-property()"
 		prop: to-word prop
 		if prop = 'columns [
 			to-error "remove-bulk-property()  :  cannot remove COLUMNS property ... it is required by bulk."
@@ -1781,7 +1791,7 @@ slim/register [
 		if hdr: get-bulk-property/block bulk prop [
 			remove/part hdr 2
 		]
-		vout
+		;vout
 		bulk
 	]
 
