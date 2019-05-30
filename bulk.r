@@ -303,18 +303,26 @@ slim/register [
 	;-                                                                                                       .
 	;-----------------------------------------------------------------------------------------------------------
 	;
-	;-     LIBS
+	;- LIBS
 	;
 	;-----------------------------------------------------------------------------------------------------------
 	xmlb: slim/open/expose 'xmlb none [load-xml mold-xml xml-attr-grid]
-	slim/open/expose 'utils-encoding none [utf-8-to-win-1252 strip-bom]
+	slim/open/expose 'utils-encoding none [utf8-win1252 strip-bom]
+	
 	
 	;-                                                                                                       .
 	;-----------------------------------------------------------------------------------------------------------
 	;
-	;- PARSING RULES
+	;- GLOBALS
 	;
 	;-----------------------------------------------------------------------------------------------------------
+	
+	;--------------------------
+	;-     	default-null:
+	;
+	;--------------------------
+	default-null: "#[NULL]"
+
 	
 	
 	
@@ -450,7 +458,7 @@ slim/register [
 		;
 		;--------------------------
 		=uqvalue=: [
-			copy .txt some =unquoted-chars= !collect!
+			copy .txt any =unquoted-chars= !collect!
 		]
 
 		;--------------------------
@@ -510,7 +518,7 @@ slim/register [
 								.column-count <> .old-column-count
 								to-error rejoin ["column count mismatch! (line ".line-count ") was : " .old-column-count  " found : " .column-count ]
 							]
-							;?? .column-count
+							;v?? .column-count
 							;.column-count: 
 							append .table .row 
 							clear .row  
@@ -594,7 +602,7 @@ slim/register [
 	; create a new bulk 
 	;-----------------
 	make-bulk: funcl [
-		columns [integer! block!] "when a block! is given, it's the names of the columns, columns count header is then set automatically."
+		columns [integer! block!] "when a block! is given, it's the names of the columns, columns count header is then set automatically.^/Names can be given in string! or word! type."
 		/records data [block!]
 		/properties props [block! none!]
 	][
@@ -703,8 +711,8 @@ slim/register [
 			]
 		]
 		
-		if utf8 [data: utf-8-to-win-1252 strip-bom data]
-		
+		if utf8 [ data: utf8-win1252/transcode strip-bom data ]
+		;probe stats
 		vout
 		data
 	]
@@ -760,10 +768,12 @@ slim/register [
 	; tests:    
 	;--------------------------
 	csv-to-bulk: funcl [
-		csv-data	 [string! file! binary!]	"Path of the csv file, or its binary|string content"
-		/no-header	    "Will store the first row as bulk labels"
-		/utf8			"Set if the file is in UTF-8 and needs to be converted to ANSI"
-		;/auto-fill  "will fill rows missing data (at end)"
+		csv-data	[string! file! binary!]	"Path of the csv file, or its binary|string content"
+		/no-header	"Will store the first row as bulk labels"
+		/utf8		"Set if the file is in UTF-8 and needs to be converted to ANSI"
+		/null		null-value  [string!]	"The value to convert to none in the bulk, default is #[NULL]"
+		;/auto-fill "will fill rows missing data (at end)"
+		/quiet 		"do not show warnings"
 	][
 		vin  "csv-to-bulk()"
 		csv-data: either utf8 [read-data/utf8 csv-data][read-data csv-data]
@@ -771,12 +781,14 @@ slim/register [
 		; - Data integrity verification
 		; If the data has more than one row, it should contain at least one crlf
 		; The absence of clrf might indicate a wrong file reading => WARNING
-		unless find csv-data crlf [
-			vprint "==============================================================="
-			vprint "WARNING! (csv-to-bulk): No crlf found in data"
-			vprint {Please use [to-string read/binary <file-path>] to read the file}
-			vprint "If the data contains only one row, you can ignore this warning"
-			vprint "==============================================================="
+		unless quiet [
+			unless find csv-data crlf [
+				vprint "==============================================================="
+				vprint "WARNING! (csv-to-bulk): No crlf found in data"
+				vprint {Please use [to-string read/binary <file-path>] to read the file}
+				vprint "If the data contains only one row, you can ignore this warning"
+				vprint "==============================================================="
+			]
 		]
 		
 		parsed-result: parse-csv csv-data
@@ -795,7 +807,16 @@ slim/register [
 		]
 
 		;---
+		; Manage none values in loaded CSV
+		;?? null
+		;?? null-value
+		null-value: any [null-value default-null]
+
+		;?? null-value
+		replace/all parsed-result null-value none
+		;---
 		; create the bulk 		
+
 		bulk: make-bulk/records/properties cols parsed-result labels
 		new-line/skip next bulk true cols
 		
@@ -855,7 +876,13 @@ slim/register [
 		/no-header 	"Do not output the header row."
 		/flush		"Flush the bulk content from memory.  Also header column names, if they where present.^/This is used to dump a csv in a serialization loop,^/we don't want to dump the headers at each part of the dump. when file is given, /flush will assume write/append, so clear it first."
 	][
-		vin "bulk-to-csv()"
+		;vin "bulk-to-csv()"
+		
+		
+		null-value: any [
+			null-value
+			default-null
+		]
 		
 		result: any [
 			all [string? in-data  in-data]
@@ -890,10 +917,12 @@ slim/register [
 		blk-data: next blk ;skip metadata
 		forskip blk-data col-nbr [
 			c-row: copy/part blk-data col-nbr
-			foreach cell c-row [
-				either null-value [
+			either null-value [
+				foreach cell c-row [
 					repend result [to-csv-content/default cell null-value ","]
-				][
+				]
+			][
+				forach cell c-row [
 					repend result [to-csv-content cell ","]
 				]
 			]
@@ -901,8 +930,10 @@ slim/register [
 			append result crlf
 		]
 		
-		take/last result
-		take/last result ; Remove trailing crlf
+		
+		; Remove trailing crlf
+		;take/last result
+		;take/last result 
 		
 		if output-file [
 			either flush [
@@ -916,7 +947,7 @@ slim/register [
 			clear-bulk blk
 			remove-bulk-property blk 'labels ; we remove these so they don't get dumped a second time.
 		]
-		vout
+		;vout
 		
 		first reduce [result result: none]
 	]
@@ -943,41 +974,35 @@ slim/register [
 	][
 		;vin "to-csv-content()"
 		; Manage args
-		
-		either none? content [
-			unless null-val [null-val: "#[NULL]"]
-			content: null-val
-		][
-			unless string! = type? content [
+		case [
+			none? content [
+				content: any [null-val default-null]
+			]
+			not string? content [
 				content: mold/all content
 			]
 		]
 		
 		; this implementation is faster than the tightest parse   ( wrap: parse/all content [ any [=wrap-chars= ]] )
-		either content [
-			if find content #"," [
-				wrap?: true
-			]
-			
-			if find content #"^"" [
-				; Escape double-quotes
-				wrap?: true
-				replace/all content {"} {""}
-			]
+		if find content #"," [
+			wrap?: true
+		]
 		
-			if find content lf [
-				; csv cells should only contain Line feeds,
-				; so we remove the CR
-				replace/all content cr ""
-				wrap?: true
-			]
-			
-			if wrap? [
-				content: rejoin [{"} content {"}]
-			]
-		][
-			
-			content: null-val
+		if find content #"^"" [
+			; Escape double-quotes
+			wrap?: true
+			replace/all content {"} {""}
+		]
+	
+		if find content lf [
+			; csv cells should only contain Line feeds,
+			; so we remove the CR
+			replace/all content cr ""
+			wrap?: true
+		]
+		
+		if wrap? [
+			content: rejoin [{"} content {"}]
 		]
 		;vout
 		
@@ -1083,7 +1108,7 @@ slim/register [
 				]
 				
 				; Manage NULL values
-				if value = "#[NULL]" [value: none]
+				if value = default-null [value: none]
 				
 				append current-col-values value
 				
@@ -1205,6 +1230,66 @@ slim/register [
 	;- ROW MANIPULATION
 	;
 	;-----------------------------------------------------------------------------------------------------------
+	;--------------------------
+	;-     insert-objects()
+	;--------------------------
+	; purpose:  
+	;
+	; inputs:   
+	;
+	; returns:  
+	;
+	; notes:    
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	insert-objects: funcl [
+		blk		[block!]
+		records	[block!]
+		row		[integer! none!]
+	][
+		;vin "insert-object()"
+		
+		; vprint "=== Insert records in bulk: ==="
+		blk-cols: column-labels blk
+		; v?? blk-cols
+		
+		foreach record-obj records [
+			; vprint "===== NEW OBJECT TO INSERT ======"
+			; v?? record-obj
+			obj-cols: words-of record-obj
+			; v?? obj-cols
+			foreach col obj-cols [
+				; Add column if not present in bulk
+				unless find blk-cols col [
+					; vprint ["--> Add col " col " to bulk"]
+					add-column blk col
+				]
+				
+			]
+			; vprint "== BULK AFTER COLS INSERTION =="
+			; v?? blk
+			
+			; vprint "--> Insert data"
+			new-blk-cols: column-labels blk
+			new-blk-row: copy []
+			foreach col new-blk-cols [
+				; if the given object doesn't have the data, we insert null
+				val: attempt [get in record-obj col]
+				; vprint ["Value found for col " col ": " mold/all val]
+				append new-blk-row val
+			]
+			
+			; vprint ["Append row to blk: " mold/all new-blk-row]
+			insert-bulk-records blk new-blk-row row
+		]
+		; vprint "=== State of bulk at the end of the insert process ==="
+		; v?? blk
+		; ask "... post insert-objects ..."
+		;vout
+	]
 	
 	;-----------------
 	;-     insert-bulk-records()
@@ -1294,7 +1379,7 @@ slim/register [
 	;--------------------------
 	add-column: funcl [
 		blk [block!]
-		col-label	[word!]
+		col-label	[word! string!]
 		/val	col-val		"The value for each already present rows for the new column, default is none"
 		/prepend			"Will add the column at the beginning instead than at the end"
 	][
@@ -1330,6 +1415,34 @@ slim/register [
 		vout
 		
 		head blk
+	]
+
+
+
+	;-----------------
+	;-     column-idx()
+	;
+	; if columns are labeled, return the column index matching specified bulk
+	; returns none if no labels or name not in list.
+	;-----------------
+	get-bulk-labels-index:  ; deprecated name
+	;---
+	column-idx: funcl [
+		blk [block!]
+		label [word!]
+	][
+		vin "column-idx()"
+		v?? label
+		idx: result: if block? labels: get-bulk-property blk 'labels [
+			if labels: find labels label [
+				index? labels
+			]
+		]
+		
+		v?? idx
+		vout
+		
+		idx
 	]
 
 	;-----------------
@@ -1409,32 +1522,6 @@ slim/register [
 	]
 	
 	
-	;-----------------
-	;-     column-idx()
-	;
-	; if columns are labeled, return the column index matching specified bulk
-	; returns none if no labels or name not in list.
-	;-----------------
-;	get-bulk-labels-index:  ; deprecated name
-;	;---
-;	column-idx: func [
-;		blk [block!]
-;		label [word!]
-;		/local labels
-;	][
-;		vin "column-idx()"
-;		v?? label
-;		idx: result: if block? labels: get-bulk-property blk 'labels [
-;			if labels: find labels label [
-;				index? labels
-;			]
-;		]
-;		
-;		v?? idx
-;		vout
-;		
-;		idx
-;	]
 
 
 	;-----------------
@@ -1468,6 +1555,17 @@ slim/register [
 	][
 		;vin "column-labels()"
 		either set [
+			forall names [
+				name: first names
+				switch/default type?/word name [
+					word! [] ; all good nothing to do.
+					string! [
+						change names to-word name
+					]
+				][
+					to-error "bulk/column-labels/set() : column labels can only be set from string! or word! values"
+				]
+			]	
 			set-bulk-property  bulk 'labels names
 		][
 			get-bulk-property  bulk 'labels
@@ -1684,7 +1782,7 @@ slim/register [
 		bulk [block!]
 		prop [word! set-word! lit-word!]
 	][
-		vin "remove-bulk-property()"
+		;vin "remove-bulk-property()"
 		prop: to-word prop
 		if prop = 'columns [
 			to-error "remove-bulk-property()  :  cannot remove COLUMNS property ... it is required by bulk."
@@ -1693,7 +1791,7 @@ slim/register [
 		if hdr: get-bulk-property/block bulk prop [
 			remove/part hdr 2
 		]
-		vout
+		;vout
 		bulk
 	]
 
@@ -2286,7 +2384,7 @@ slim/register [
 	;-----------------
 	;-     sort-bulk()
 	;-----------------
-	sort-bulk: func [
+	sort-bulk: funcl [
 		blk [block!]
 		/using sort-column [integer! word! none!] "what column to sort on, none defaults to 'sort-column property or first column if undefined."
 	][
@@ -2299,12 +2397,12 @@ slim/register [
 				; get the sort column from a property in the bulk.
 				all [
 					word? sort-column
-					integer? sort-column: get-bulk-property sort-column
-					sort-column
+					integer? i: column-idx sort-column
+					i
 				]
 			]
 			
-			; get the sort column from a property in the bulk.
+			; get the default sort column from a property in the bulk.
 			all [
 				integer? sort-column: get-bulk-property 'sort-column
 				sort-column
@@ -2313,7 +2411,7 @@ slim/register [
 			; default 
 			1
 		]
-		sort/skip/compare blk (bulk-columns blk) sort-column
+		sort/skip/compare next blk (bulk-columns blk) sort-column
 		blk
 	]
 	
