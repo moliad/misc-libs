@@ -439,8 +439,8 @@ slim/register [
 		=qvalue=: [
 			{"} 
 			;(print {"})
-			some [ 
-				  [{""} (append .value {"})]
+			any [ 
+				 [{""} (append .value {"})]
 				| [
 					copy .txt 
 					some [
@@ -458,7 +458,7 @@ slim/register [
 		;
 		;--------------------------
 		=uqvalue=: [
-			copy .txt any =unquoted-chars= !collect!
+			copy .txt some =unquoted-chars= !collect!
 		]
 
 		;--------------------------
@@ -467,11 +467,10 @@ slim/register [
 		;--------------------------
 		=value=: [
 			[
-			 	 =qvalue=  ;(prin "Q  - ")
+			 	=qvalue=  ;(prin "Q  - ")
 				| =uqvalue= ;(prin "UQ - ")
 				| empty-ptr: [=separator= | crlf | end] (.txt: copy "") :empty-ptr
 			]
-			;(print .value)
 		]
 
 		;--------------------------
@@ -482,7 +481,7 @@ slim/register [
 			=value=  !collect-value! 
 			any [
 				=separator= ;(print "separator")
-				=value= !collect-value!  
+				=value= !collect-value!
 			]
 		]
 		
@@ -505,7 +504,7 @@ slim/register [
 					)
 					| [
 						=not-eof= =row=
-						[  =nl= end  (=not-eof=: =fail= ) |  =nl= | end (=not-eof=: =fail=) ]
+						[  =nl= end  (=not-eof=: =fail=) |  =nl= | end (=not-eof=: =fail=) ]
 						(
 							if tag-row-end [
 								append .row '___ROW-END___
@@ -990,7 +989,7 @@ slim/register [
 		
 		if find content #"^"" [
 			; Escape double-quotes
-			wrap?: true
+			wrap?: true   
 			replace/all content {"} {""}
 		]
 	
