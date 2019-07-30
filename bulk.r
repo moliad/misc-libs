@@ -2,8 +2,8 @@ REBOL [
 	; -- Core Header attributes --
 	title: {BULK | record based, table engine using a flat block.}
 	file: %bulk.r
-	version: 1.0.0
-	date: 2013-9-12
+	version: 1.0.1
+	date: lib-bulk
 	author: "Maxim Olivier-Adlhoch"
 	purpose: "A data-exchange format for use in any REBOL script"
 	web: http://www.revault.org/modules/bulk.rmrk
@@ -203,7 +203,7 @@ REBOL [
 		]
 		
 		good-header-bulk: [
-			[columns: 4]
+			[columns: 3]
 			1 2 3
 			4 5 6
 			7 8 9
@@ -442,8 +442,7 @@ slim/register [
 			some [ 
 				  [{""} (append .value {"})]
 				| [
-					copy .txt 
-					some [
+					copy .txt some [
 						=quoted-chars=  
 						| =nl= (++ .line-count)
 					]
@@ -771,8 +770,15 @@ slim/register [
 		csv-data	[string! file! binary!]	"Path of the csv file, or its binary|string content"
 		/no-header	"Will store the first row as bulk labels"
 		/utf8		"Set if the file is in UTF-8 and needs to be converted to ANSI"
-		/null		null-value  [string!]	"The value to convert to none in the bulk, default is #[NULL]"
+		/null		
+			null-value  [string!]	"The value to convert to none in the bulk, default is #[NULL]"
 		;/auto-fill "will fill rows missing data (at end)"
+		/where		
+			where-clause "provide a where clause to filter lines AS WE LOAD them.  this may greatly reduce the memory consumption. uses the same mechanism as select-bulk"
+		/every		
+			do-every "do this block for every line in source file, filtered or not"
+		/each		
+			do-each "do this block for each row in final bulk (after where clause)"
 		/quiet 		"do not show warnings"
 	][
 		vin  "csv-to-bulk()"
@@ -1304,6 +1310,7 @@ slim/register [
 		row [integer! none!]
 		/local cols
 	][
+		vin "insert-bulk-records()"
 		cols: get-bulk-property blk 'columns
 		either 0 = mod (length? records) cols [
 			either row [
@@ -1318,6 +1325,8 @@ slim/register [
 		][
 			to-error "insert-bulk-row(): record length(s) doesn't match bulk record size."
 		]
+		vout
+		blk
 	]
 	
 	
@@ -1815,7 +1824,7 @@ slim/register [
 	select*: :select ; we don't actually use select in the bulk lib but just in case.
 	
 	;--------------------------
-	;-     select()
+	;-     select-bulk()
 	;--------------------------
 	; purpose:  takes a bulk, performs an sql like SELECT statement on it.
 	;
@@ -1830,17 +1839,17 @@ slim/register [
 	;
 	; tests:    
 	;--------------------------
-	select: funcl [
+	select-bulk: funcl [
 		blk [block!]
 		/where  where-clause  [block!] ; a "doable" rebol block
 		/select select-clause [word! block! integer!]
 	][
-		vin "select (bulk lib)"
+		vin "bulk.r/select-bulk"
 		blk-cp: copy blk ; Copy the bulk because we will remove-each on it
 		old-labels: get-bulk-property blk-cp 'labels
 		
 		;--------------------------
-		;-         Apply where clause
+		;-         - Apply where clause
 		;
 		;--------------------------
 		if where [
@@ -1855,7 +1864,7 @@ slim/register [
 		]
 		
 		;--------------------------
-		;-         Apply select clause
+		;-         - Apply select clause
 		;
 		;--------------------------
 		if select [
@@ -1914,7 +1923,7 @@ slim/register [
 		vin "compare-smc()"
 		
 		;--------------------------
-		;-         Get bulk columns labels
+		;-         - Get bulk columns labels
 		;	These labels will be used to loop over each bulk
 		;--------------------------
 		cols-a: column-labels bulk-a
@@ -1938,7 +1947,7 @@ slim/register [
 		forall cols-b [change cols-b to-word rejoin ["b." first cols-b]]
 		
 		;--------------------------
-		;-         Manage args and generate defaults
+		;-         - Manage args and generate defaults
 		;
 		;--------------------------
 
@@ -1968,7 +1977,7 @@ slim/register [
 		v?? select-clause
 		
 		;--------------------------
-		;-         Generate resut bulk
+		;-         - Generate resut bulk
 		;
 		;--------------------------
 		; Get labels for result bulk
@@ -1985,7 +1994,7 @@ slim/register [
 		forall ctx-words [change ctx-words to-set-word first ctx-words ]
 		
 		;--------------------------
-		;-         Compare each row
+		;-         - Compare each row
 		;
 		;--------------------------
 		; Generate the code that will loop over each bulk and generate result rows
@@ -2022,7 +2031,7 @@ slim/register [
 	
 	
 	;--------------------------
-	;-     compare()
+	;-     compare-bulk()
 	;--------------------------
 	; purpose:  
 	;
@@ -2036,7 +2045,7 @@ slim/register [
 	;
 	; tests:    
 	;--------------------------
-	compare: funcl [
+	compare-bulk: funcl [
 		bulk-a [block!]
 		bulk-b [block!]
 		/where  where-clause  [block!] "select what rows to include in output (default: all rows)"
