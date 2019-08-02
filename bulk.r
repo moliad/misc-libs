@@ -716,6 +716,8 @@ slim/register [
 			.select-clause:  .column-names:  .where-clause: none
 			.do-each: .do-every: none
 			.columns-ctx: none
+			.output-columns: none
+
 			vout
 		]
 	]
