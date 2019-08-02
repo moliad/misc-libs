@@ -561,7 +561,7 @@ slim/register [
 								; note that we add the full row block which you CAN 
 								; manipulate BEFORE running the WHERE clause
 								;----------------
-								.columns-ctx: copy [.row: .line-count: ]
+								.columns-ctx: copy [.row: .line-count: .table: ]
 								.output-columns: copy [] ; columns after select-clause if any.
 								.orig-row-columns: copy []
 								
@@ -639,6 +639,7 @@ slim/register [
 							]
 							if .columns-ctx [
 								.columns-ctx/.row: .row
+								.columns-ctx/.table: .table
 								.columns-ctx/.line-count: .line-count
 							]
 
@@ -665,16 +666,19 @@ slim/register [
 								;vprint "-----------------------"
 								;v?? .output-columns
 								;v?? .do-each
-								if .do-each [
-									do .do-each
-								]
-								
 								; setting here allows us to load it back on result to generate the labels properly in the bulk.
 								unless .output-columns [
 									.output-columns: copy .row
 								]
 								result-row: reduce .output-columns
 								;v?? result-row
+								if .columns-ctx [
+									.columns-ctx/.row: result-row
+								]
+								if .do-each [
+									do .do-each
+								]
+								
 								append .table result-row
 							]
 							
