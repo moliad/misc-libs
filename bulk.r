@@ -2625,6 +2625,7 @@ slim/register [
 	sort-bulk: funcl [
 		blk [block!]
 		/using sort-column [integer! word! none!] "what column to sort on, none defaults to 'sort-column property or first column if undefined."
+		/reverse
 	][
 		sort-column: any [
 			any [
@@ -2635,7 +2636,7 @@ slim/register [
 				; get the sort column from a property in the bulk.
 				all [
 					word? sort-column
-					integer? i: column-idx sort-column
+					integer? i: column-idx blk sort-column
 					i
 				]
 			]
@@ -2649,7 +2650,11 @@ slim/register [
 			; default 
 			1
 		]
-		sort/skip/compare next blk (bulk-columns blk) sort-column
+		either reverse [
+			sort/skip/compare/reverse next blk (bulk-columns blk) sort-column
+		][
+			sort/skip/compare next blk (bulk-columns blk) sort-column
+		]
 		blk
 	]
 	
