@@ -155,7 +155,7 @@ slim/register [
 		=whitespaces?=
 		{"}
 		(.json-string: clear "" ) ; remember to COPY this value within any rule using it.
-		some [
+		any [
 			"\" [
 				; quotation mark
 				  {"} (append .json-string {"})
@@ -575,3 +575,16 @@ slim/register [
 
 
 ]
+
+
+
+
+
+;------------------------------------
+; We are done testing this library.
+;------------------------------------
+;
+; test-exit-slim
+;
+;------------------------------------
+
