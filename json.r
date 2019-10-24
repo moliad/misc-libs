@@ -309,6 +309,8 @@ slim/register [
 					.err-here:
 					(to-error rejoin ["Invalid JSON here: >" .err-here])
 				]
+				| .err-here:
+				(to-error rejoin ["Invalid JSON OBJECT here (missing comma): >" .err-here])
 			]
 		]
 		=whitespaces?= ; allows empty objects with spaces in literal
