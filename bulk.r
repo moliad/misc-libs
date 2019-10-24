@@ -2,8 +2,8 @@ REBOL [
 	; -- Core Header attributes --
 	title: {BULK | record based, table engine using a flat block.}
 	file: %bulk.r
-	version: 1.0.0
-	date: 2013-9-12
+	version: 1.0.1
+	date: lib-bulk
 	author: "Maxim Olivier-Adlhoch"
 	purpose: "A data-exchange format for use in any REBOL script"
 	web: http://www.revault.org/modules/bulk.rmrk
@@ -203,7 +203,7 @@ REBOL [
 		]
 		
 		good-header-bulk: [
-			[columns: 4]
+			[columns: 3]
 			1 2 3
 			4 5 6
 			7 8 9
@@ -352,6 +352,14 @@ slim/register [
 		;--------------------------
 		.row: []
 		
+		;--------------------------
+		;-         .columns-ctx:
+		;
+		; used whenever we are given a set of columns to use in select & where clauses.
+		;--------------------------
+		.columns-ctx: none
+		
+		
 		
 		;--------------------------
 		;-         tag-row-end:
@@ -360,7 +368,24 @@ slim/register [
 		;--------------------------
 		tag-row-end: none
 		
-
+		
+		;--------------------------
+		;-         select/where filtering:
+		;
+		;--------------------------
+		.column-names:  .select-clause:  .where-clause: none
+		
+		;--------------------------
+		;-         line-expressions:
+		;
+		;--------------------------
+		.do-each: .do-every: none		
+		
+		;--------------------------
+		;-         .output-columns:
+		;
+		;--------------------------
+		.output-columns: .extra-columns: .orig-row-columns: none
 		
 		;--------------------------
 		;-         .value:
@@ -439,13 +464,12 @@ slim/register [
 		=qvalue=: [
 			{"} 
 			;(print {"})
-			some [ 
-				  [{""} (append .value {"})]
+			any [ 
+				 [{""} (append .value {"})]
 				| [
-					copy .txt 
-					some [
+					copy .txt some [
 						=quoted-chars=  
-						| =nl= (++ .line-count)
+						| =nl= ;(++ .line-count)
 					]
 					!collect! 
 				]
@@ -458,7 +482,7 @@ slim/register [
 		;
 		;--------------------------
 		=uqvalue=: [
-			copy .txt any =unquoted-chars= !collect!
+			copy .txt some =unquoted-chars= !collect!
 		]
 
 		;--------------------------
@@ -467,11 +491,10 @@ slim/register [
 		;--------------------------
 		=value=: [
 			[
-			 	 =qvalue=  ;(prin "Q  - ")
+			 	=qvalue=  ;(prin "Q  - ")
 				| =uqvalue= ;(prin "UQ - ")
 				| empty-ptr: [=separator= | crlf | end] (.txt: copy "") :empty-ptr
 			]
-			;(print .value)
 		]
 
 		;--------------------------
@@ -482,7 +505,7 @@ slim/register [
 			=value=  !collect-value! 
 			any [
 				=separator= ;(print "separator")
-				=value= !collect-value!  
+				=value= !collect-value!
 			]
 		]
 		
@@ -495,22 +518,17 @@ slim/register [
 			(=not-eof=: =ok=)
 			some [
 				.here:
-				;(print .here)
-				;(print first .here)
 				[
 					; note that we do not accumulate blank lines in the result dataset.
 					any =spacers= =nl= (
-						;++ .line-count
-						;probe "____BLANK LINE____" 
 					)
 					| [
 						=not-eof= =row=
-						[  =nl= end  (=not-eof=: =fail= ) |  =nl= | end (=not-eof=: =fail=) ]
+						[  =nl= end  (=not-eof=: =fail=) | (-- .line-count) =nl= | end (=not-eof=: =fail=) ]
 						(
 							if tag-row-end [
 								append .row '___ROW-END___
 							]
-							;++ .line-count
 							.old-column-count: .column-count
 							.column-count: length? .row
 							all [
@@ -518,11 +536,153 @@ slim/register [
 								.column-count <> .old-column-count
 								to-error rejoin ["column count mismatch! (line ".line-count ") was : " .old-column-count  " found : " .column-count ]
 							]
-							;v?? .column-count
-							;.column-count: 
-							append .table .row 
+							
+							
+							.qualified?: true
+							
+							;----------------
+							; rebuild expression ctx to run any of the clauses.
+							; this is reset at each init.
+							;
+							; we want to run this only once every csv file.						
+							;----------------
+							if all [
+								.column-names
+								not .columns-ctx
+							][
+								;vprint "====================================="
+								;vprint "      COMPILING RUN-TIME QUERY"
+								;vprint "====================================="
+							
+								;----------------
+								; we need to build an object version of the .column-names
+								; this is to bind the where clause to it.
+								;
+								; note that we add the full row block which you CAN 
+								; manipulate BEFORE running the WHERE clause
+								;----------------
+								.columns-ctx: copy [.row: .line-count: .table: ]
+								.output-columns: copy [] ; columns after select-clause if any.
+								.orig-row-columns: copy []
+								
+								foreach word .column-names [
+									append .orig-row-columns  to-word word ; makes sure all column names are words (not string!)
+									append .columns-ctx to-set-word word
+									append .output-columns to-word word
+								]
+								foreach word [.do-each .do-every .where-clause][
+									;--------
+									; add any set words from the expressions within the ctx
+									; this way it isolates the expression from the calling code
+									; and we can add completely new column values in the result!
+									;--------
+									append .columns-ctx extract-set-words/only any [get word []]
+								]
+								
+								append .columns-ctx none
+								
+								.columns-ctx: context .columns-ctx
+								bind .orig-row-columns .columns-ctx
+
+								if .select-clause [
+									if find .select-clause '* [
+										; we must fill-in the columns with all columns not yet
+										; listed in the select clause
+										
+										.extra-columns: exclude .output-columns .select-clause
+										;v?? .extra-columns
+
+										replace .select-clause '* .extra-columns
+									]
+									;v?? .select-clause
+									
+									.output-columns: .select-clause
+								]
+								
+								foreach word [.do-each .do-every .select-clause .where-clause .output-columns][
+									words: get word
+									;v?? words
+									if words [
+										bind get word .columns-ctx
+									]
+								]
+
+
+;								if .where-clause [
+;									bind .where-clause .columns-ctx
+;								]
+;								if .do-each [
+;									bind .do-each .columns-ctx
+;								]
+;								if .do-every[
+;									bind .do-every .columns-ctx
+;								]
+;								if .select-clause [
+;									bind .select-clause .columns-ctx
+;								]
+
+								;v?? .output-columns
+								;v?? .select-clause
+
+								;vprint "====================================="
+								;vprint "    DONE COMPILING RUN-TIME QUERY"
+								;vprint "====================================="
+							]
+							
+							; note that extra columns will be set to none, 
+							; before all processing is done, which is very useful.	
+							
+							;v?? .orig-row-columns
+							;v?? .row
+							if .orig-row-columns [
+								set .orig-row-columns .row
+							]
+							if .columns-ctx [
+								.columns-ctx/.row: .row
+								.columns-ctx/.table: .table
+								.columns-ctx/.line-count: .line-count
+							]
+
+							if .do-every [
+								; be careful, you can destroy the .row for all other phases,
+								; including data accumulation
+								do .do-every
+							]
+							
+							;---------------------------
+							;  APPLY WHERE CLAUSE FILTER 
+							;---------------------------
+							if .where-clause [
+								;v?? .where-clause
+								.qualified?: do .where-clause
+								;if .qualified? [
+								;	ask "found one"
+								;]
+							]
+							
+							if .qualified? [
+								;vprint "-----------------------"
+								;vprint "ADDING DATA"
+								;vprint "-----------------------"
+								;v?? .output-columns
+								;v?? .do-each
+								; setting here allows us to load it back on result to generate the labels properly in the bulk.
+								unless .output-columns [
+									.output-columns: copy .row
+								]
+								result-row: reduce .output-columns
+								;v?? result-row
+								if .columns-ctx [
+									.columns-ctx/.row: result-row
+								]
+								if .do-each [
+									do .do-each
+								]
+								
+								append .table result-row
+							]
+							
 							clear .row  
-							;probe "____ROW____"
 						)
 					]
 					;---
@@ -557,6 +717,11 @@ slim/register [
 			.column-count: none
 			.old-column-count: none
 			.line-count: 0
+			.select-clause:  .column-names:  .where-clause: none
+			.do-each: .do-every: none
+			.columns-ctx: none
+			.output-columns: none
+
 			vout
 		]
 	]
@@ -699,17 +864,18 @@ slim/register [
 				;             details like newlines and encodings which depend of very specific
 				;             characters which cannot be mangled.
 				;---
-				to-string read/binary data
+				as-string read/binary data
 			]
 			binary! [
 				; If given a binary, convert it to a string for parsing
-				to-string data
+				as-string data
 			]
 			string! [
 				; If given a string, take it as is
 				data
 			]
 		]
+		
 		
 		if utf8 [ data: utf8-win1252/transcode strip-bom data ]
 		;probe stats
@@ -728,6 +894,8 @@ slim/register [
 	; returns:  just the table data, not yet in bulk format.
 	;
 	; notes:    - beware CRLF vs LF they are not treated the same by CSV parser.
+	;           - any none! parameter is simply ignored.
+	;           - /columns is required when using any of the other refinements.
 	;
 	; to do:    
 	;
@@ -735,16 +903,34 @@ slim/register [
 	;--------------------------
 	parse-csv: funcl [
 		data	[string!]	"The data to parse"
+		/columns
+			column-names [block! none!] "set the column names for expression part of select/where/every/each expressions."
+		/select
+			s-clause [block! none!] "must reduce to a list of words which columns in column-names."
+		/where  
+			w-clause [block! none!]  "Expression to run on each line to qualify in output"
+		/every
+			do-every [block! none!] "do this for each qualified line"
+		/each
+			do-each [block! none!] "do this for each qualified line"
 	][
 		vin "parse-csv()"
 		;---
 		; We want to reinitialize context between each call
 		csv-ctx/init
 		
+		;v?? w-columns
+		;v?? w-clause
+		
+		csv-ctx/.column-names: column-names
+		csv-ctx/.select-clause:  s-clause
+		csv-ctx/.where-clause:  w-clause
+		csv-ctx/.do-every: do-every
+		csv-ctx/.do-each: do-each
+		
 		unless parse/all data csv-ctx/=csv= [
 			to-error rejoin ["bulk/parse-csv : CSV format error here: " copy/part csv-ctx/.here 50 ]
 		]
-		
 		;v?? csv-ctx/.table
 		
 		vout
@@ -770,10 +956,19 @@ slim/register [
 	csv-to-bulk: funcl [
 		csv-data	[string! file! binary!]	"Path of the csv file, or its binary|string content"
 		/no-header	"Will store the first row as bulk labels"
-		/utf8		"Set if the file is in UTF-8 and needs to be converted to ANSI"
-		/null		null-value  [string!]	"The value to convert to none in the bulk, default is #[NULL]"
-		;/auto-fill "will fill rows missing data (at end)"
 		/quiet 		"do not show warnings"
+		/utf8		"Set if the file is in UTF-8 and needs to be converted to ANSI"
+		/null		
+			null-value  [string!]	"The value to convert to none in the bulk, default is #[NULL]"
+		/select 
+			select-clause [block!] "chose which columns to return.  If not used, returns all columns"
+		/where		
+			where-clause [block!]"provide a where clause to filter lines AS WE LOAD them.  this may greatly reduce the memory consumption. uses the same mechanism as select-bulk"
+		/every		
+			do-every [block!] "do this block for every line in source file, filtered or not"
+		/each		
+			do-each [block!]"do this block for each row in final bulk (after where clause)"
+		;/auto-fill "will fill rows missing data (at end)"
 	][
 		vin  "csv-to-bulk()"
 		csv-data: either utf8 [read-data/utf8 csv-data][read-data csv-data]
@@ -791,19 +986,59 @@ slim/register [
 			]
 		]
 		
-		parsed-result: parse-csv csv-data
 		
 		
-		cols: csv-ctx/.column-count
+		headers?: not no-header
+		
+		v?? headers?
+		if headers? [
+			;vprobe copy/part csv-data 2000
+			
+			;---
+			; Parse first line of file if we need columns
+			end-of-line: find/tail csv-data LF
+		
+		
+			if end-of-line [
+				;vprint "found linefeed"
+				header: copy/part csv-data end-of-line
+				
+				; we must not read line a second time
+				csv-data: end-of-line
+				
+				;v?? header
+				
+				
+				; remove all new-line characters
+				;replace/all header CR ""
+				;replace/all header LF ""
+				
+				header-row: parse-csv header
+				forall header-row [
+					change  header-row to-word first header-row
+				]
+			]
+		]
+		
+		;vprobe header-row
+		;v?? where-clause
+		either where-clause [
+			;vprint "WE HAVE A WHERE CLAUSE"
+			parsed-result: parse-csv/columns/where/every/each/select csv-data header-row where-clause do-every do-each select-clause
+		][
+			;vprint "WE HAVE NO WHERE CLAUSE"
+			parsed-result: parse-csv/columns/every/each/select csv-data header-row do-every do-each select-clause
+		]
+		;ask "!!!"
+		
+		
+		cols: length? csv-ctx/.output-columns
 		
 		;---
 		; Add column names to the bulk, take them from the first row
-		unless no-header [
-			head-row: take/part parsed-result cols
-			forall head-row [
-				change  head-row to-word first head-row
-			]
-			labels: compose/only [labels: (head-row)] ; labels is none when /no-header is used
+		if headers? [
+			;head-row: take/part parsed-result cols
+			labels: compose/only [labels: (copy csv-ctx/.output-columns)] ; labels is none when /no-header is used
 		]
 
 		;---
@@ -990,7 +1225,7 @@ slim/register [
 		
 		if find content #"^"" [
 			; Escape double-quotes
-			wrap?: true
+			wrap?: true   
 			replace/all content {"} {""}
 		]
 	
@@ -1304,6 +1539,7 @@ slim/register [
 		row [integer! none!]
 		/local cols
 	][
+		vin "insert-bulk-records()"
 		cols: get-bulk-property blk 'columns
 		either 0 = mod (length? records) cols [
 			either row [
@@ -1318,6 +1554,8 @@ slim/register [
 		][
 			to-error "insert-bulk-row(): record length(s) doesn't match bulk record size."
 		]
+		vout
+		blk
 	]
 	
 	
@@ -1815,7 +2053,7 @@ slim/register [
 	select*: :select ; we don't actually use select in the bulk lib but just in case.
 	
 	;--------------------------
-	;-     select()
+	;-     select-bulk()
 	;--------------------------
 	; purpose:  takes a bulk, performs an sql like SELECT statement on it.
 	;
@@ -1830,17 +2068,17 @@ slim/register [
 	;
 	; tests:    
 	;--------------------------
-	select: funcl [
+	select-bulk: funcl [
 		blk [block!]
 		/where  where-clause  [block!] ; a "doable" rebol block
 		/select select-clause [word! block! integer!]
 	][
-		vin "select (bulk lib)"
+		vin "bulk.r/select-bulk"
 		blk-cp: copy blk ; Copy the bulk because we will remove-each on it
 		old-labels: get-bulk-property blk-cp 'labels
 		
 		;--------------------------
-		;-         Apply where clause
+		;-         - Apply where clause
 		;
 		;--------------------------
 		if where [
@@ -1855,7 +2093,7 @@ slim/register [
 		]
 		
 		;--------------------------
-		;-         Apply select clause
+		;-         - Apply select clause
 		;
 		;--------------------------
 		if select [
@@ -1914,7 +2152,7 @@ slim/register [
 		vin "compare-smc()"
 		
 		;--------------------------
-		;-         Get bulk columns labels
+		;-         - Get bulk columns labels
 		;	These labels will be used to loop over each bulk
 		;--------------------------
 		cols-a: column-labels bulk-a
@@ -1938,7 +2176,7 @@ slim/register [
 		forall cols-b [change cols-b to-word rejoin ["b." first cols-b]]
 		
 		;--------------------------
-		;-         Manage args and generate defaults
+		;-         - Manage args and generate defaults
 		;
 		;--------------------------
 
@@ -1968,7 +2206,7 @@ slim/register [
 		v?? select-clause
 		
 		;--------------------------
-		;-         Generate resut bulk
+		;-         - Generate resut bulk
 		;
 		;--------------------------
 		; Get labels for result bulk
@@ -1985,7 +2223,7 @@ slim/register [
 		forall ctx-words [change ctx-words to-set-word first ctx-words ]
 		
 		;--------------------------
-		;-         Compare each row
+		;-         - Compare each row
 		;
 		;--------------------------
 		; Generate the code that will loop over each bulk and generate result rows
@@ -2022,7 +2260,7 @@ slim/register [
 	
 	
 	;--------------------------
-	;-     compare()
+	;-     compare-bulk()
 	;--------------------------
 	; purpose:  
 	;
@@ -2036,7 +2274,7 @@ slim/register [
 	;
 	; tests:    
 	;--------------------------
-	compare: funcl [
+	compare-bulk: funcl [
 		bulk-a [block!]
 		bulk-b [block!]
 		/where  where-clause  [block!] "select what rows to include in output (default: all rows)"
@@ -2387,6 +2625,7 @@ slim/register [
 	sort-bulk: funcl [
 		blk [block!]
 		/using sort-column [integer! word! none!] "what column to sort on, none defaults to 'sort-column property or first column if undefined."
+		/reverse
 	][
 		sort-column: any [
 			any [
@@ -2397,7 +2636,7 @@ slim/register [
 				; get the sort column from a property in the bulk.
 				all [
 					word? sort-column
-					integer? i: column-idx sort-column
+					integer? i: column-idx blk sort-column
 					i
 				]
 			]
@@ -2411,7 +2650,11 @@ slim/register [
 			; default 
 			1
 		]
-		sort/skip/compare next blk (bulk-columns blk) sort-column
+		either reverse [
+			sort/skip/compare/reverse next blk (bulk-columns blk) sort-column
+		][
+			sort/skip/compare next blk (bulk-columns blk) sort-column
+		]
 		blk
 	]
 	

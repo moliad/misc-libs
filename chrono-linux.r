@@ -12,7 +12,7 @@ rebol [
 
 	; -- slim - Library Manager --
 	slim-name: 'chrono-linux
-	slim-version: 1.2.1
+	slim-version: 1.4.0
 	slim-prefix: none
 	slim-update: http://www.revault.org/downloads/modules/chrono.r
 
