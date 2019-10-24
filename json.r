@@ -304,14 +304,23 @@ slim/register [
 			=json-field-value=
 			any [
 				"," [
+					
+					=whitespaces?= .err-here: "}"
+					(to-error rejoin ["Invalid JSON OBJECT here (trailing comma): >" .err-here])
+					|
 					=json-field-value=
 					|
 					.err-here:
 					(to-error rejoin ["Invalid JSON here: >" .err-here])
 				]
 				| .err-here:
+				=whitespaces?= {"}
 				(to-error rejoin ["Invalid JSON OBJECT here (missing comma): >" .err-here])
 			]
+		]
+		opt [
+			=whitespaces?=
+			"," 
 		]
 		=whitespaces?= ; allows empty objects with spaces in literal
 		"}"
