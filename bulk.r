@@ -1617,41 +1617,71 @@ slim/register [
 	;--------------------------
 	add-column: funcl [
 		blk [block!]
-		col-label	[word! string!]
-		/val	col-val		"The value for each already present rows for the new column, default is none"
-		/prepend			"Will add the column at the beginning instead than at the end"
+		col-label	[word! string! block!]
+		/val		col-val		"The value for each already present rows for the new column, default is none, if a block! we can setup multiple columns at once, missing columns are set to none."
+		/prepend				"Will add the column at the beginning instead than at the end"
 	][
 		vin "add-column()"
 		
+		;-----------------
 		; Fill new column content
-		rows-nbr: bulk-rows blk
-		cols-nbr: bulk-columns blk
-		blk-ptr: next blk	; Skip metadata
+		;-----------------
+		rows-nbr:  bulk-rows blk
+		cols-nbr:  bulk-columns blk
+		blk-ptr:   next blk	; Skip metadata
+		cols:      compose[(col-label)]
+		xtra-cols: length? cols
+		col-val:   compose [(col-val)]
+		
+		if xtra-cols > (length? col-val) [
+			insert/dup tail col-val none   (xtra-cols - (length? col-val) )
+		]
+		cols-count: (cols-nbr + xtra-cols)
+		
+		;-----------------
+		; create a temporary buffer.
+		;-----------------
+		newsize: (rows-nbr + 1) * cols-count
+		newdata: make block! newsize
+		;v?? newsize
+		
+		;v?? rows-nbr
+		;v?? col-val
 		
 		either prepend [
 			loop (rows-nbr) [
-				insert blk-ptr col-val
-				blk-ptr: skip blk-ptr cols-nbr
-				blk-ptr: next blk-ptr ; Because we added a value, we need to push the pointer
+				newdata: insert newdata col-val
+				newdata: insert newdata copy/part blk-ptr cols-nbr
+				blk-ptr: skip blk-ptr cols-nbr  ; Because we added a value, we need to push the pointer
 			]
 		][
 			loop (rows-nbr) [
-				blk-ptr: skip blk-ptr cols-nbr
-				insert blk-ptr col-val
-				blk-ptr: next blk-ptr ; Because we added a value, we need to push the pointer
+				newdata: insert newdata copy/part blk-ptr cols-nbr
+				newdata: insert newdata col-val
+				blk-ptr: skip blk-ptr cols-nbr  ; Because we added a value, we need to push the pointer
 			]
 		]
 		
-		; Add column label
+		;-----------------
+		; update column labels
+		;-----------------
+		newdata: head newdata
+		new-line/skip newdata true cols-count
+		;v?? newdata
+		
 		new-labels: get-bulk-property blk 'labels
 		either prepend [insert new-labels col-label][append new-labels col-label]
+		column-labels/set blk new-labels
+		clear next blk
+		append blk newdata
 		
-		; Increment columns number
-		cols-nbr: cols-nbr + 1
-		set-bulk-property blk 'columns cols-nbr
+		newdata: none
+		blk-ptr: none
+		col-label: none
+		
 		
 		vout
-		
+
 		head blk
 	]
 
@@ -1804,7 +1834,8 @@ slim/register [
 					to-error "bulk/column-labels/set() : column labels can only be set from string! or word! values"
 				]
 			]	
-			set-bulk-property  bulk 'labels names
+			set-bulk-property bulk 'labels names
+			set-bulk-property bulk 'columns length? names
 		][
 			get-bulk-property  bulk 'labels
 		]
