@@ -2369,7 +2369,7 @@ slim/register [
 			; add bulk-b specific columns 
 			v?? select-clause
 		]
-		?? select-clause
+		v?? select-clause
  		; to do
  		
  		; extract set words from select-clause
@@ -2381,11 +2381,11 @@ slim/register [
 				| skip
 			]
 		]
-		?? output-columns
+		v?? output-columns
 		; build a set-word version of cols-b to insert within context to keep binding local ...
 		b-setwords: copy column-labels bulk-b
 		forall b-setwords [change b-setwords to-set-word first b-setwords]
-		?? b-setwords
+		v?? b-setwords
 		
 		ctx: none
 		
@@ -2724,11 +2724,11 @@ slim/register [
 			append accumulator next blk2	
 		][
 			
-			print "ERROR! (merge-bulks): The 2 provided bulks are incompatible or wrongly typed"
+			vprint "ERROR! (merge-bulks): The 2 provided bulks are incompatible or wrongly typed"
 			blk1-lbls: column-labels blk1
-			?? blk1-lbls
+			;v?? blk1-lbls
 			blk2-lbls: column-labels blk2
-			?? blk2-lbls
+			;v?? blk2-lbls
 			none
 		]
 		
