@@ -1590,6 +1590,33 @@ slim/register [
 		]
 		;vout
 	]
+	
+	
+	
+	;--------------------------
+	;-     realign-bulk-rows()
+	;--------------------------
+	; purpose:  
+	;
+	; inputs:   
+	;
+	; returns:  
+	;
+	; notes:    
+	;
+	; to do:    
+	;
+	; tests:    
+	;--------------------------
+	realign-bulk-rows: funcl [
+		bulk [block!]
+	][
+		vin "realign-bulk-rows()"
+		new-line/skip next bulk true bulk-columns bulk
+		vout
+		bulk
+	]
+	
 
 	
 	
