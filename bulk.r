@@ -437,7 +437,7 @@ slim/register [
 		;
 		;--------------------------
 		!collect!: [(append .value .txt)]
-		!collect-value!: [(append .row copy .value clear .value)]
+		!collect-value!: [(either .value = default-null [append .row none] [append .row copy .value clear .value])]
 
 		;--------------------------
 		;-         =separator=:
@@ -917,8 +917,9 @@ slim/register [
 		vin "parse-csv()"
 		;---
 		; We want to reinitialize context between each call
+		;v?? data
+		;ask "..."
 		csv-ctx/init
-		
 		;v?? w-columns
 		;v?? w-clause
 		
@@ -934,7 +935,6 @@ slim/register [
 		;v?? csv-ctx/.table
 		
 		vout
-		
 		first reduce [ csv-ctx/.table csv-ctx/.table: none ]
 	]
 	
@@ -964,6 +964,8 @@ slim/register [
 			select-clause [block!] "chose which columns to return.  If not used, returns all columns"
 		/where		
 			where-clause [block!]"provide a where clause to filter lines AS WE LOAD them.  this may greatly reduce the memory consumption. uses the same mechanism as select-bulk"
+		/types 
+			type-clause [block!] "Column name and type to convert to"
 		/every		
 			do-every [block!] "do this block for every line in source file, filtered or not"
 		/each		
@@ -985,8 +987,6 @@ slim/register [
 				vprint "==============================================================="
 			]
 		]
-		
-		
 		
 		headers?: not no-header
 		
@@ -1020,6 +1020,38 @@ slim/register [
 			]
 		]
 		
+		;==========================
+		;==========================
+		;==========================
+		;==========================
+		;==========================
+		;==========================
+		;==========================
+		if types [
+			vprint "============="
+			vprint "============="
+			vprint "============="
+			vprint "============="
+			vprint "============="
+			do-type: copy []
+			;v?? type-clause
+			foreach [column type] type-clause[
+			;v?? column
+			;v?? type
+				append do-type reduce [
+					'if to-word :column reduce [
+					 	:column 'to type (to-word column)
+					 ]
+				]
+			]
+			do-every: copy any [
+				do-every
+				[]
+			]
+			insert do-every do-type
+		v?? csv-data
+		]
+		v?? do-every
 		;vprobe header-row
 		;v?? where-clause
 		either where-clause [
@@ -1048,7 +1080,8 @@ slim/register [
 		null-value: any [null-value default-null]
 
 		;?? null-value
-		replace/all parsed-result null-value none
+		;replace/all parsed-result null-value none  ; now performed in-line within the parsing.
+		
 		;---
 		; create the bulk 		
 
