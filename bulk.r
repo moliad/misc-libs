@@ -955,7 +955,7 @@ slim/register [
 	;--------------------------
 	csv-to-bulk: funcl [
 		csv-data	[string! file! binary!]	"Path of the csv file, or its binary|string content"
-		/no-header	"Will store the first row as bulk labels"
+		/no-header	"Will store the first CSV row as a normal bulk row instead of in the labels property"
 		/quiet 		"do not show warnings"
 		/utf8		"Set if the file is in UTF-8 and needs to be converted to ANSI"
 		/null		
