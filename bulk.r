@@ -2166,7 +2166,7 @@ slim/register [
 		/no-copy "Selection will be done in-place i.e. the source block will be mutilated"
 	][
 		vin "bulk.r/select-bulk"
-		unless no-copy [blk-cp: copy blk] ; Copy the bulk because we will remove-each on it
+		either no-copy [blk-cp: blk][blk-cp: copy blk] ; Copy the bulk because we will remove-each on it
 		old-labels: get-bulk-property blk-cp 'labels
 		
 		;--------------------------
