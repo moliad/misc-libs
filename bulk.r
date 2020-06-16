@@ -1049,7 +1049,7 @@ slim/register [
 				[]
 			]
 			insert do-every do-type
-		v?? csv-data
+			;v?? csv-data
 		]
 		v?? do-every
 		;vprobe header-row
@@ -1730,7 +1730,11 @@ slim/register [
 		;v?? newdata
 		
 		new-labels: get-bulk-property blk 'labels
-		either prepend [insert new-labels col-label][append new-labels col-label]
+		either prepend [
+			insert new-labels col-label
+		][
+			append new-labels col-label
+		]
 		column-labels/set blk new-labels
 		clear next blk
 		append blk newdata
@@ -2054,18 +2058,19 @@ slim/register [
 		prop [word! set-word! lit-word!]
 		value
 	][
-		;prop: to-set-word prop
+		vin "set-bulk-property()"
 		if set-word? :value [
 			to-error "set-bulk-property(): cannot set property as set-word type"
 		]
 		; property exists, replace value
 		either hdr: get-bulk-property/block blk prop [
 			;insert next hdr value ; <SMC> Seems like this line doesn't replace the value ... ?
-			change next hdr :value
+			change/only next hdr :value
 		][
 			; new property
 			append first blk reduce [to-set-word prop :value]
 		]
+		vout
 		:value
 	]
 	
@@ -2077,6 +2082,8 @@ slim/register [
 		blk [block!]
 		props [block!]
 	][
+		vin "set-bulk-properties()"
+		v?? props
 		until [
 			property: pick props 1
 			props: next props
@@ -2090,7 +2097,9 @@ slim/register [
 			]
 			tail? props
 		]
+		vout
 	]
+	
 	
 	;--------------------------
 	;-     remove-bulk-property()
