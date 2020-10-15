@@ -491,9 +491,17 @@ slim/register [
 		;--------------------------
 		=value=: [
 			[
-			 	=qvalue=  ;(prin "Q  - ")
-				| =uqvalue= ;(prin "UQ - ")
-				| empty-ptr: [=separator= | crlf | end] (.txt: copy "") :empty-ptr
+			 	=qvalue=  ;(print "Q  - ")
+				| =uqvalue= ;(print "UQ - ")
+				| [
+					empty-ptr: [
+						  =separator=; (print "!!") 
+						| =lf= ;(print "<<") 
+						| end
+					]
+					(.txt: copy "") 
+					:empty-ptr
+				]
 			]
 		]
 
@@ -507,6 +515,7 @@ slim/register [
 				=separator= ;(print "separator")
 				=value= !collect-value!
 			]
+			;(print "=row=")
 		]
 		
 				
@@ -524,7 +533,13 @@ slim/register [
 					)
 					| [
 						=not-eof= =row=
-						[  =nl= end  (=not-eof=: =fail=) | (-- .line-count) =nl= | end (=not-eof=: =fail=) ]
+						;(print "============")
+						[  
+							  =nl=   end  (=not-eof=: =fail= ) 
+							| (-- .line-count) =nl= 
+							| end (=not-eof=: =fail=) 
+						]
+						;(print "``````````````````")
 						(
 							if tag-row-end [
 								append .row '___ROW-END___
