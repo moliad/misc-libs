@@ -955,7 +955,7 @@ slim/register [
 	;--------------------------
 	csv-to-bulk: funcl [
 		csv-data	[string! file! binary!]	"Path of the csv file, or its binary|string content"
-		/no-header	"Will store the first row as bulk labels"
+		/no-header	"Will store the first CSV row as a normal bulk row instead of in the labels property"
 		/quiet 		"do not show warnings"
 		/utf8		"Set if the file is in UTF-8 and needs to be converted to ANSI"
 		/null		
@@ -2172,9 +2172,10 @@ slim/register [
 		blk [block!]
 		/where  where-clause  [block!] ; a "doable" rebol block
 		/select select-clause [word! block! integer!]
+		/no-copy "Selection will be done in-place i.e. the source block will be mutilated"
 	][
 		vin "bulk.r/select-bulk"
-		blk-cp: copy blk ; Copy the bulk because we will remove-each on it
+		either no-copy [blk-cp: blk][blk-cp: copy blk] ; Copy the bulk because we will remove-each on it
 		old-labels: get-bulk-property blk-cp 'labels
 		
 		;--------------------------
