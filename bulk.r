@@ -428,7 +428,7 @@ slim/register [
 		=tab=:		charset "^-"
 		=spacer=:	union =space= =tab=
 		=spacers=:	[some =spacer=]
-		=nl=:		[ opt =cr= =lf= (++ .line-count)]
+		=nl=:		[ opt =cr= =lf= ] ;(++ .line-count)]
 		=cr=:		#"^M"
 		=lf=:		#"^/" 
 		
@@ -469,7 +469,7 @@ slim/register [
 				| [
 					copy .txt some [
 						=quoted-chars=  
-						| =nl= ;(++ .line-count)
+						| =nl= (++ .line-count)
 					]
 					!collect! 
 				]
@@ -490,19 +490,36 @@ slim/register [
 		;
 		;--------------------------
 		=value=: [
+			
 			[
-			 	=qvalue=  ;(print "Q  - ")
-				| =uqvalue= ;(print "UQ - ")
+			 	=qvalue=  ;(prin "Q  - " ?? .txt)
+				| =uqvalue= ;(prin "UQ - " ?? .txt)
 				| [
 					empty-ptr: [
-						  =separator=; (print "!!") 
-						| =nl= ;(print "<<") 
-						| end
+						  =separator= 
+;						  (
+;						  	.txt: "" 
+;						  	prin "!!"  
+;						  	?? .txt
+;						  ) 
+						| 
+						;(print "LF?")
+						 =nl=
+;						 (
+;							print "<<" 
+;							.txt: ""
+;						) 
+						| end 
+;						(
+;							prin "/" 
+;							.txt: ""
+;						)
 					]
 					(.txt: copy "") 
 					:empty-ptr
 				]
 			]
+			;(print ">VALUE<^/")
 		]
 
 		;--------------------------
@@ -512,7 +529,7 @@ slim/register [
 		=row=:  [
 			=value=  !collect-value! 
 			any [
-				=separator= ;(print "separator")
+				=separator= ;(print "----->  separator")
 				=value= !collect-value!
 			]
 			;(print "=row=")
@@ -529,15 +546,18 @@ slim/register [
 				.here:
 				[
 					; note that we do not accumulate blank lines in the result dataset.
-					any =spacers= =nl= (
-					)
+					any =spacers= =nl= (++ .line-count)
 					| [
 						=not-eof= =row=
-						;(print "============")
+;						..here:
+;						(
+;							print "============"
+;							probe ..here
+;						)
 						[  
-							  =nl=   end  (=not-eof=: =fail= ) 
-							| (-- .line-count) =nl= 
-							| end (=not-eof=: =fail=) 
+							  =nl=   end  (=not-eof=: =fail= ++ .line-count) 
+							| =nl= (++ .line-count)
+							| end (=not-eof=: =fail=)
 						]
 						;(print "``````````````````")
 						(
@@ -622,10 +642,12 @@ slim/register [
 									]
 								]
 
-
 ;								if .where-clause [
 ;									bind .where-clause .columns-ctx
 ;								]
+;								?? .columns-ctx
+;								?? .where-clause
+;
 ;								if .do-each [
 ;									bind .do-each .columns-ctx
 ;								]
