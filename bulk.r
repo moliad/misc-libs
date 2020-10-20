@@ -496,7 +496,7 @@ slim/register [
 				| [
 					empty-ptr: [
 						  =separator=; (print "!!") 
-						| =lf= ;(print "<<") 
+						| =nl= ;(print "<<") 
 						| end
 					]
 					(.txt: copy "") 
